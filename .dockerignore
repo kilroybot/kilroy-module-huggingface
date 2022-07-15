@@ -1,0 +1,9 @@
+*
+!kilroy_module_huggingface/src/**
+!kilroy_module_huggingface/tests/**
+!kilroy_module_huggingface/pyproject.toml
+!kilroy_module_huggingface/poetry.lock
+!kilroy_module_huggingface/LICENSE
+!kilroy_module_huggingface/README.md
+!environment.yml
+!requirements.txt
