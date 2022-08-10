@@ -1,9 +1,6 @@
-ARG MINICONDA_IMAGE_TAG=4.10.3-alpine
+ARG MINICONDA_IMAGE_TAG=4.10.3
 
 FROM continuumio/miniconda3:$MINICONDA_IMAGE_TAG AS base
-
-# add bash, because it's not available by default on alpine
-RUN apk add --no-cache bash
 
 # install poetry
 COPY ./requirements.txt /tmp/requirements.txt

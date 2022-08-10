@@ -1,0 +1,47 @@
+module:
+  modelName: gpt2
+  optimizerType: adam
+  optimizersParams:
+    adam:
+      lr: 0.001
+      betas: [ 0.9, 0.999 ]
+      eps: 1.0e-08
+      weightDecay: 0.0
+    rmsProp:
+      lr: 0.01
+      momentum: 0
+      alpha: 0.99
+      eps: 1.0e-08
+      weightDecay: 0.0
+    sgd:
+      lr: 0.01
+      momentum: 0
+      weightDecay: 0.0
+      dampening: 0.0
+  generatorParams:
+    samplerType: epsilonNucleus
+    samplersParams:
+      topK:
+        k: 10
+      nucleus:
+        p: 0.95
+      epsilonProportional:
+        epsilon: 0.01
+      epsilonTopK:
+        epsilon: 0.01
+        k: 10
+      epsilonNucleus:
+        epsilon: 0.01
+        p: 0.95
+    contexts:
+      - ""
+    maxLength: 8
+    endTokens:
+      - "<|endoftext|>"
+    batchSize: 64
+  codecParams:
+    maxCharacters: 280
+  batchSize: 64
+server:
+  host: localhost
+  port: 11000
