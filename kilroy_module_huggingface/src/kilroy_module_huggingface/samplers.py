@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
+from typing import Any, Dict
 
-from kilroy_module_py_shared import JSON
 from kilroy_module_pytorch_py_sdk import (
     EpsilonNucleusCategoricalSampler,
     EpsilonProportionalCategoricalSampler,
@@ -49,7 +49,7 @@ class TopKSamplerState(SerializableState):
 class TopKSampler(Sampler, Configurable[TopKSamplerState]):
     class KParameter(Parameter[TopKSamplerState, int]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "integer", "minimum": 1}
 
     async def get(self) -> TensorSampler:
@@ -67,7 +67,7 @@ class NucleusSamplerState(SerializableState):
 class NucleusSampler(Sampler, Configurable[NucleusSamplerState]):
     class PParameter(Parameter[NucleusSamplerState, float]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0, "maximum": 1}
 
     async def get(self) -> TensorSampler:
@@ -87,7 +87,7 @@ class EpsilonProportionalSampler(
 ):
     class EpsilonParameter(Parameter[EpsilonProportionalSamplerState, float]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0, "maximum": 1}
 
     async def get(self) -> TensorSampler:
@@ -106,12 +106,12 @@ class EpsilonTopKSamplerState(SerializableState):
 class EpsilonTopKSampler(Sampler, Configurable[EpsilonTopKSamplerState]):
     class KParameter(Parameter[EpsilonTopKSamplerState, int]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "integer", "minimum": 1}
 
     class EpsilonParameter(Parameter[EpsilonTopKSamplerState, float]):
         @classproperty
-        def schema(self) -> JSON:
+        def schema(self) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0, "maximum": 1}
 
     async def get(self) -> TensorSampler:
@@ -132,12 +132,12 @@ class EpsilonNucleusSamplerState(SerializableState):
 class EpsilonNucleusSampler(Sampler, Configurable[EpsilonNucleusSamplerState]):
     class PParameter(Parameter[EpsilonNucleusSamplerState, float]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0, "maximum": 1}
 
     class EpsilonParameter(Parameter[EpsilonNucleusSamplerState, float]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0, "maximum": 1}
 
     async def get(self) -> TensorSampler:

@@ -1,18 +1,17 @@
 import json
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import torch
-from kilroy_module_py_shared import JSON
 from kilroy_module_server_py_sdk import (
     Configurable,
     Parameter,
+    SerializableModel,
     TextData,
     TextOnlyPost,
+    background,
     classproperty,
 )
-from kilroy_ws_server_py_sdk import SerializableModel, background
-from kilroy_ws_server_py_sdk.configurable import StateType
 from tokenizers import Tokenizer
 from torch import Tensor
 
@@ -30,7 +29,7 @@ class CodecState:
 class Codec(Configurable[CodecState]):
     class MaxCharactersParameter(Parameter[CodecState, Optional[int]]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {
                 "type": ["integer", "null"],
                 "minimum": 0,
@@ -40,14 +39,14 @@ class Codec(Configurable[CodecState]):
         super().__init__(*args, **kwargs)
         self._tokenizer = tokenizer
 
-    async def build_default_state(self) -> StateType:
+    async def build_default_state(self) -> CodecState:
         params = CodecParams.parse_obj(self._kwargs)
         return CodecState(
             tokenizer=self._tokenizer,
             max_characters=params.max_characters,
         )
 
-    async def encode(self, sequence: Tensor) -> JSON:
+    async def encode(self, sequence: Tensor) -> Dict[str, Any]:
         indices = sequence.flatten().tolist()
         async with self.state.read_lock() as state:
             text = await background(
@@ -59,7 +58,7 @@ class Codec(Configurable[CodecState]):
         post = TextOnlyPost(text=TextData(content=text))
         return json.loads(post.json())
 
-    async def decode(self, post: JSON) -> Tensor:
+    async def decode(self, post: Dict[str, Any]) -> Tensor:
         post = TextOnlyPost.parse_obj(post)
         text = post.text.content
         async with self.state.read_lock() as state:
