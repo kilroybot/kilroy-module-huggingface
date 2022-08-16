@@ -4,7 +4,6 @@ from uuid import UUID, uuid4
 
 import torch
 from aiostream import stream
-from kilroy_module_py_shared import JSON, JSONSchema
 from kilroy_module_pytorch_py_sdk import (
     pack_list,
     unpack_to_list,
@@ -16,6 +15,8 @@ from kilroy_module_pytorch_py_sdk.utils import (
 from kilroy_module_server_py_sdk import (
     CategorizableBasedParameter,
     Configurable,
+    JSONSchema,
+    Metadata,
     Metric,
     Module,
     NestedParameter,
@@ -37,7 +38,7 @@ from kilroy_module_huggingface.optimizers import Optimizer
 class HuggingfaceModuleParams(SerializableModel):
     model_name: str
     optimizer_type: str
-    optimizers_params: Dict[str, JSON]
+    optimizers_params: Dict[str, Dict[str, Any]]
     generator_params: Dict[str, Any]
     codec_params: Dict[str, Any]
     batch_size: int
@@ -47,7 +48,7 @@ class HuggingfaceModuleParams(SerializableModel):
 class HuggingfaceModuleState:
     model: HuggingfaceModel
     optimizer: Optimizer
-    optimizers_params: Dict[str, JSON]
+    optimizers_params: Dict[str, Dict[str, Any]]
     generator: Generator
     codec: Codec
     logprobs_cache: Dict[UUID, Tensor]
@@ -59,7 +60,7 @@ class OptimizerParameter(
 ):
     async def _get_params(
         self, state: HuggingfaceModuleState, category: str
-    ) -> JSON:
+    ) -> Dict[str, Any]:
         return {
             "params": state.model.parameters(),
             **state.optimizers_params.get(category, {}),
@@ -75,6 +76,21 @@ class CodecParameter(NestedParameter[HuggingfaceModuleState, Codec]):
 
 
 class HuggingfaceModule(Module[HuggingfaceModuleState]):
+    @classproperty
+    def metadata(cls) -> Metadata:
+        return Metadata(
+            key="kilroy-module-huggingface",
+            description="Kilroy module using Huggingface models.",
+        )
+
+    @classproperty
+    def post_schema(cls) -> JSONSchema:
+        return JSONSchema(**TextOnlyPost.schema())
+
+    @classproperty
+    def metrics(cls) -> Set[Metric]:
+        return set()
+
     @staticmethod
     async def _build_model(
         params: HuggingfaceModuleParams,
@@ -137,15 +153,9 @@ class HuggingfaceModule(Module[HuggingfaceModuleState]):
             CodecParameter(),
         }
 
-    @property
-    def post_schema(self) -> JSONSchema:
-        return JSONSchema(TextOnlyPost.schema())
-
-    @property
-    def metrics(self) -> Set[Metric]:
-        return set()
-
-    async def generate(self, n: int) -> AsyncIterable[Tuple[UUID, JSON]]:
+    async def generate(
+        self, n: int
+    ) -> AsyncIterable[Tuple[UUID, Dict[str, Any]]]:
         state = await self.state.value.fetch()
         async for result in state.generator.generate(state.model, n):
             sequences = unpack_to_list(result.sequences)
@@ -155,7 +165,7 @@ class HuggingfaceModule(Module[HuggingfaceModuleState]):
                 state.logprobs_cache[post_id] = logprob[0]
                 yield post_id, post
 
-    async def fit_posts(self, posts: AsyncIterable[JSON]) -> None:
+    async def fit_posts(self, posts: AsyncIterable[Dict[str, Any]]) -> None:
         async with self.state.read_lock() as state:
             batches = stream.chunks(posts, state.batch_size)
 
@@ -175,7 +185,7 @@ class HuggingfaceModule(Module[HuggingfaceModuleState]):
 
                     await background(fit, state.model, sequences)
 
-    async def fit_score(self, scores: List[Tuple[UUID, float]]) -> None:
+    async def fit_scores(self, scores: List[Tuple[UUID, float]]) -> None:
         # noinspection PyShadowingNames
         def _fit(logprobs, scores):
             loss = -(logprobs * scores).mean()

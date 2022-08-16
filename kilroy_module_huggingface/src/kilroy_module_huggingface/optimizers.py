@@ -13,7 +13,6 @@ from typing import (
 )
 
 from humps import decamelize
-from kilroy_module_py_shared import JSON
 from kilroy_module_server_py_sdk import (
     Categorizable,
     Configurable,
@@ -92,7 +91,7 @@ class AdamOptimizerState:
 class AdamOptimizer(Optimizer[Adam], Configurable[AdamOptimizerState]):
     class LrParameter(OptimizerParameter[AdamOptimizerState, float]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0}
 
     class Beta1Parameter(OptimizerParameter[AdamOptimizerState, float]):
@@ -105,7 +104,7 @@ class AdamOptimizer(Optimizer[Adam], Configurable[AdamOptimizerState]):
             group["betas"][0] = value
 
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0}
 
     class Beta2Parameter(OptimizerParameter[AdamOptimizerState, float]):
@@ -118,17 +117,17 @@ class AdamOptimizer(Optimizer[Adam], Configurable[AdamOptimizerState]):
             group["betas"][1] = value
 
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0}
 
     class EpsParameter(OptimizerParameter[AdamOptimizerState, float]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0}
 
     class WeightDecayParameter(OptimizerParameter[AdamOptimizerState, float]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0}
 
     async def build_default_state(self) -> AdamOptimizerState:
@@ -163,29 +162,29 @@ class RMSPropOptimizer(
 ):
     class LrParameter(OptimizerParameter[RMSPropOptimizerState, float]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0}
 
     class MomentumParameter(OptimizerParameter[RMSPropOptimizerState, float]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0}
 
     class AlphaParameter(OptimizerParameter[RMSPropOptimizerState, float]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0}
 
     class EpsParameter(OptimizerParameter[RMSPropOptimizerState, float]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0}
 
     class WeightDecayParameter(
         OptimizerParameter[RMSPropOptimizerState, float]
     ):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0}
 
     async def build_default_state(self) -> RMSPropOptimizerState:
@@ -217,22 +216,22 @@ class SGDOptimizerState:
 class SGDOptimizer(Optimizer[SGD], Configurable[SGDOptimizerState]):
     class LrParameter(OptimizerParameter[SGDOptimizerState, float]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0}
 
     class MomentumParameter(OptimizerParameter[SGDOptimizerState, float]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0}
 
     class WeightDecayParameter(OptimizerParameter[SGDOptimizerState, float]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0}
 
     class DampeningParameter(OptimizerParameter[SGDOptimizerState, float]):
         @classproperty
-        def schema(cls) -> JSON:
+        def schema(cls) -> Dict[str, Any]:
             return {"type": "number", "minimum": 0}
 
     async def build_default_state(self) -> SGDOptimizerState:

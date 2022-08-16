@@ -1,8 +1,7 @@
 import random
 from dataclasses import dataclass
-from typing import AsyncIterable, Dict, List, Set
+from typing import Any, AsyncIterable, Dict, List, Set
 
-from kilroy_module_py_shared import JSON
 from kilroy_module_pytorch_py_sdk import (
     GenerationResult,
     SequenceGenerator,
@@ -22,7 +21,7 @@ from kilroy_module_huggingface.samplers import Sampler
 
 class GeneratorParams(SerializableModel):
     sampler_type: str
-    samplers_params: Dict[str, JSON]
+    samplers_params: Dict[str, Dict[str, Any]]
     contexts: List[str]
     max_length: int
     end_tokens: List[str]
@@ -33,7 +32,7 @@ class GeneratorParams(SerializableModel):
 class GeneratorState:
     generator: SequenceGenerator
     sampler: Sampler
-    samplers_params: Dict[str, JSON]
+    samplers_params: Dict[str, Dict[str, Any]]
     contexts: List[str]
     max_length: int
     end_tokens: List[str]
@@ -46,7 +45,7 @@ class SamplerParameter(CategorizableBasedParameter[GeneratorState, Sampler]):
 
 class ContextsParameter(Parameter[GeneratorState, List[str]]):
     @classproperty
-    def schema(cls) -> JSON:
+    def schema(cls) -> Dict[str, Any]:
         return {
             "type": "array",
             "items": {"type": "string"},
@@ -56,7 +55,7 @@ class ContextsParameter(Parameter[GeneratorState, List[str]]):
 
 class MaxLengthParameter(Parameter[GeneratorState, int]):
     @classproperty
-    def schema(cls) -> JSON:
+    def schema(cls) -> Dict[str, Any]:
         return {
             "type": "integer",
             "minimum": 1,
@@ -65,7 +64,7 @@ class MaxLengthParameter(Parameter[GeneratorState, int]):
 
 class EndTokensParameter(Parameter[GeneratorState, List[str]]):
     @classproperty
-    def schema(cls) -> JSON:
+    def schema(cls) -> Dict[str, Any]:
         return {
             "type": "array",
             "items": {"type": "string"},
@@ -75,7 +74,7 @@ class EndTokensParameter(Parameter[GeneratorState, List[str]]):
 
 class BatchSizeParameter(Parameter[GeneratorState, int]):
     @classproperty
-    def schema(cls) -> JSON:
+    def schema(cls) -> Dict[str, Any]:
         return {
             "type": "integer",
             "minimum": 1,
