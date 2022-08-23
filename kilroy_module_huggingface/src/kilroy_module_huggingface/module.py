@@ -1,17 +1,9 @@
 from dataclasses import dataclass
-from typing import Any, AsyncIterable, Dict, List, Set, Tuple
+from typing import Any, AsyncIterable, Dict, List, Optional, Set, Tuple
 from uuid import UUID, uuid4
 
 import torch
-from aiostream import stream
-from kilroy_module_pytorch_py_sdk import (
-    pack_list,
-    unpack_to_list,
-)
-from kilroy_module_pytorch_py_sdk.utils import (
-    truncate_first_element,
-    truncate_last_element,
-)
+from kilroy_module_pytorch_py_sdk import unpack_to_list
 from kilroy_module_server_py_sdk import (
     CategorizableBasedParameter,
     Configurable,
@@ -27,55 +19,57 @@ from kilroy_module_server_py_sdk import (
     classproperty,
 )
 from torch import Tensor
-from torch.nn import NLLLoss
 
 from kilroy_module_huggingface.codec import Codec
 from kilroy_module_huggingface.generator import Generator
-from kilroy_module_huggingface.models import HuggingfaceModel
+from kilroy_module_huggingface.models import HuggingfaceLanguageModel
 from kilroy_module_huggingface.optimizers import Optimizer
+from kilroy_module_huggingface.trainers import Trainer
 
 
-class HuggingfaceModuleParams(SerializableModel):
+class Params(SerializableModel):
     model_name: str
-    optimizer_type: str
-    optimizers_params: Dict[str, Dict[str, Any]]
-    generator_params: Dict[str, Any]
-    codec_params: Dict[str, Any]
-    batch_size: int
+    freeze: Optional[str] = None
+    trainer_type: str = "basic"
+    trainers_params: Dict[str, Dict[str, Any]] = {}
+    optimizer_type: str = "adam"
+    optimizers_params: Dict[str, Dict[str, Any]] = {}
+    generator_params: Dict[str, Any] = {}
+    codec_params: Dict[str, Any] = {}
 
 
 @dataclass
-class HuggingfaceModuleState:
-    model: HuggingfaceModel
+class State:
+    model: HuggingfaceLanguageModel
+    trainer: Trainer
     optimizer: Optimizer
     optimizers_params: Dict[str, Dict[str, Any]]
     generator: Generator
     codec: Codec
-    logprobs_cache: Dict[UUID, Tensor]
-    batch_size: int
+    results_cache: Dict[UUID, Tuple[Tensor, Tensor]]
 
 
-class OptimizerParameter(
-    CategorizableBasedParameter[HuggingfaceModuleState, Optimizer]
-):
-    async def _get_params(
-        self, state: HuggingfaceModuleState, category: str
-    ) -> Dict[str, Any]:
+class TrainerParameter(CategorizableBasedParameter[State, Trainer]):
+    pass
+
+
+class OptimizerParameter(CategorizableBasedParameter[State, Optimizer]):
+    async def _get_params(self, state: State, category: str) -> Dict[str, Any]:
         return {
             "params": state.model.parameters(),
             **state.optimizers_params.get(category, {}),
         }
 
 
-class GeneratorParameter(NestedParameter[HuggingfaceModuleState, Generator]):
+class GeneratorParameter(NestedParameter[State, Generator]):
     pass
 
 
-class CodecParameter(NestedParameter[HuggingfaceModuleState, Codec]):
+class CodecParameter(NestedParameter[State, Codec]):
     pass
 
 
-class HuggingfaceModule(Module[HuggingfaceModuleState]):
+class HuggingfaceModule(Module[State]):
     @classproperty
     def metadata(cls) -> Metadata:
         return Metadata(
@@ -87,19 +81,32 @@ class HuggingfaceModule(Module[HuggingfaceModuleState]):
     def post_schema(cls) -> JSONSchema:
         return JSONSchema(**TextOnlyPost.schema())
 
-    @classproperty
-    def metrics(cls) -> Set[Metric]:
-        return set()
+    async def get_metrics(self) -> Set[Metric]:
+        async with self.state.read_lock() as state:
+            return await state.trainer.get_metrics()
 
     @staticmethod
     async def _build_model(
-        params: HuggingfaceModuleParams,
-    ) -> HuggingfaceModel:
-        return await HuggingfaceModel.build(params.model_name)
+        params: Params,
+    ) -> HuggingfaceLanguageModel:
+        return await background(
+            HuggingfaceLanguageModel.from_path, params.model_name
+        )
+
+    @staticmethod
+    async def _build_trainer(params: Params) -> Trainer:
+        trainer_cls = Trainer.for_category(params.trainer_type)
+        trainer_params = params.trainers_params.get(params.trainer_type, {})
+        if issubclass(trainer_cls, Configurable):
+            trainer = await trainer_cls.build(**trainer_params)
+            await trainer.init()
+        else:
+            trainer = trainer_cls(**trainer_params)
+        return trainer
 
     @staticmethod
     async def _build_optimizer(
-        params: HuggingfaceModuleParams, model: HuggingfaceModel
+        params: Params, model: HuggingfaceLanguageModel
     ) -> Optimizer:
         opt_cls = Optimizer.for_category(params.optimizer_type)
         opt_params = params.optimizers_params.get(params.optimizer_type, {})
@@ -113,41 +120,43 @@ class HuggingfaceModule(Module[HuggingfaceModuleState]):
         return optimizer
 
     @staticmethod
-    async def _build_generator(params: HuggingfaceModuleParams) -> Generator:
+    async def _build_generator(params: Params) -> Generator:
         generator = await Generator.build(**params.generator_params)
         await generator.init()
         return generator
 
     @staticmethod
-    async def _build_codec(
-        params: HuggingfaceModuleParams, model: HuggingfaceModel
-    ) -> Codec:
-        codec = await Codec.build(
-            tokenizer=model.tokenizer, **params.codec_params
-        )
+    async def _build_codec(params: Params) -> Codec:
+        codec = await Codec.build(**params.codec_params)
         await codec.init()
         return codec
 
-    async def build_default_state(self) -> HuggingfaceModuleState:
-        params = HuggingfaceModuleParams(**self._kwargs)
+    async def build_default_state(self) -> State:
+        params = Params(**self._kwargs)
         model = await self._build_model(params)
-        return HuggingfaceModuleState(
+        optimizer = await self._build_optimizer(params, model)
+        model.freeze(params.freeze)
+        return State(
             model=model,
-            optimizer=await self._build_optimizer(params, model),
+            trainer=await self._build_trainer(params),
+            optimizer=optimizer,
             optimizers_params=params.optimizers_params,
             generator=await self._build_generator(params),
-            codec=await self._build_codec(params, model),
-            logprobs_cache={},
-            batch_size=params.batch_size,
+            codec=await self._build_codec(params),
+            results_cache={},
         )
 
     async def cleanup(self) -> None:
         async with self.state.write_lock() as state:
-            await background(state.buffer.store.__exit__)
+            if isinstance(state.trainer, Configurable):
+                await state.trainer.cleanup()
+            if isinstance(state.optimizer, Configurable):
+                await state.optimizer.cleanup()
 
     @classproperty
     def parameters(cls) -> Set[Parameter]:
         return {
+            TrainerParameter(),
             OptimizerParameter(),
             GeneratorParameter(),
             CodecParameter(),
@@ -156,54 +165,50 @@ class HuggingfaceModule(Module[HuggingfaceModuleState]):
     async def generate(
         self, n: int
     ) -> AsyncIterable[Tuple[UUID, Dict[str, Any]]]:
-        state = await self.state.value.fetch()
-        async for result in state.generator.generate(state.model, n):
+        async with self.state.read_lock() as state:
+            generated = state.generator.generate(state.model, n)
+
+        async for result in generated:
             sequences = unpack_to_list(result.sequences)
+
             for sequence, logprob in zip(sequences, result.logprobs):
                 post_id = uuid4()
-                post = await state.codec.encode(sequence)
-                state.logprobs_cache[post_id] = logprob[0]
+
+                async with self.state.read_lock() as state:
+                    post = await state.codec.encode(state.model, sequence)
+
+                async with self.state.write_lock() as state:
+                    state.results_cache[post_id] = (sequence, logprob[0])
+
                 yield post_id, post
 
     async def fit_posts(self, posts: AsyncIterable[Dict[str, Any]]) -> None:
         async with self.state.read_lock() as state:
-            batches = stream.chunks(posts, state.batch_size)
+            trainer = state.trainer
+            model = state.model
 
-        async with batches.stream() as streamer:
-            async for batch in streamer:
+        async def decoded():
+            async for post in posts:
+                # noinspection PyShadowingNames
                 async with self.state.read_lock() as state:
-                    sequences = [
-                        await state.codec.decode(post) for post in batch
-                    ]
+                    yield await state.codec.decode(state.model, post)
 
-                    def fit(model, seq):
-                        input = pack_list(truncate_last_element(seq))
-                        target = pack_list(truncate_first_element(seq))
-                        logprobs = model(input)
-                        loss = NLLLoss()(logprobs.data, target.data.flatten())
-                        loss.backward()
-
-                    await background(fit, state.model, sequences)
+        await trainer.fit_supervised(model, decoded())
 
     async def fit_scores(self, scores: List[Tuple[UUID, float]]) -> None:
-        # noinspection PyShadowingNames
-        def _fit(logprobs, scores):
-            loss = -(logprobs * scores).mean()
-            loss.backward()
-
         async with self.state.read_lock() as state:
-            cache = state.logprobs_cache
+            trainer = state.trainer
+            model = state.model
 
-        logprobs = torch.stack([cache.pop(pid) for pid, _ in scores])
-        scores = torch.tensor([score for _, score in scores])
+        async def get_results():
+            for post_id, score in scores:
+                # noinspection PyShadowingNames
+                async with self.state.write_lock() as state:
+                    sequence, logprob = state.results_cache.pop(post_id)
+                yield sequence, logprob, torch.tensor(score)
 
-        await background(_fit, logprobs, scores)
+        await trainer.fit_reinforced(model, get_results())
 
     async def step(self) -> None:
-        def _step(opt):
-            opt.step()
-            opt.zero_grad()
-
-        async with self.state.read_lock() as state:
-            optimizer = await state.optimizer.get()
-            await background(_step, optimizer)
+        async with self.state.write_lock() as state:
+            await state.trainer.step(state.optimizer)

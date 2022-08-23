@@ -8,10 +8,11 @@ import logging
 from asyncio import FIRST_EXCEPTION
 from enum import Enum
 from logging import Logger
-from typing import Dict
+from typing import Dict, Optional
 
 import typer
 from kilroy_module_server_py_sdk import ModuleServer
+from typer import FileText
 
 from kilroy_module_huggingface.config import get_config
 from kilroy_module_huggingface.module import HuggingfaceModule
@@ -29,7 +30,7 @@ class Verbosity(str, Enum):
 
 def get_logger(verbosity: Verbosity) -> Logger:
     logging.basicConfig()
-    logger = logging.getLogger("kilroy-face-twitter")
+    logger = logging.getLogger("kilroy-module-huggingface")
     logger.setLevel(verbosity.value)
     return logger
 
@@ -43,7 +44,10 @@ async def run(config: Dict, logger: Logger) -> None:
         asyncio.create_task(server.run(**config.get("server", {}))),
     )
 
-    done, pending = await asyncio.wait(tasks, return_when=FIRST_EXCEPTION)
+    try:
+        done, pending = await asyncio.wait(tasks, return_when=FIRST_EXCEPTION)
+    except asyncio.CancelledError:
+        done, pending = [], tasks
 
     for task in pending:
         task.cancel()
@@ -60,13 +64,16 @@ async def run(config: Dict, logger: Logger) -> None:
 
 @cli.command()
 def main(
+    config: Optional[FileText] = typer.Option(
+        default=None, help="Configuration file"
+    ),
     verbosity: Verbosity = typer.Option(
         default="INFO", help="Verbosity level."
-    )
+    ),
 ) -> None:
     """Command line interface for kilroy-module-huggingface."""
 
-    config = get_config()
+    config = get_config(config)
     logger = get_logger(verbosity)
 
     asyncio.run(run(config, logger))
