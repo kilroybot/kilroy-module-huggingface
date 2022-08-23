@@ -2,34 +2,32 @@ import random
 from dataclasses import dataclass
 from typing import Any, AsyncIterable, Dict, List, Set
 
-from kilroy_module_pytorch_py_sdk import (
-    GenerationResult,
-    SequenceGenerator,
-)
+from kilroy_module_pytorch_py_sdk import GenerationResult, SequenceGenerator
 from kilroy_module_server_py_sdk import (
     CategorizableBasedParameter,
     Configurable,
     Parameter,
     SerializableModel,
+    background,
     classproperty,
 )
 from transformers import PreTrainedTokenizerBase
 
-from kilroy_module_huggingface.models import HuggingfaceModel
+from kilroy_module_huggingface.models import HuggingfaceLanguageModel
 from kilroy_module_huggingface.samplers import Sampler
 
 
-class GeneratorParams(SerializableModel):
-    sampler_type: str
-    samplers_params: Dict[str, Dict[str, Any]]
-    contexts: List[str]
+class Params(SerializableModel):
+    sampler_type: str = "epsilonNucleus"
+    samplers_params: Dict[str, Dict[str, Any]] = {}
+    contexts: List[str] = [""]
     max_length: int
-    end_tokens: List[str]
+    end_tokens: List[str] = []
     batch_size: int
 
 
 @dataclass
-class GeneratorState:
+class State:
     generator: SequenceGenerator
     sampler: Sampler
     samplers_params: Dict[str, Dict[str, Any]]
@@ -39,11 +37,11 @@ class GeneratorState:
     batch_size: int
 
 
-class SamplerParameter(CategorizableBasedParameter[GeneratorState, Sampler]):
+class SamplerParameter(CategorizableBasedParameter[State, Sampler]):
     pass
 
 
-class ContextsParameter(Parameter[GeneratorState, List[str]]):
+class ContextsParameter(Parameter[State, List[str]]):
     @classproperty
     def schema(cls) -> Dict[str, Any]:
         return {
@@ -53,7 +51,7 @@ class ContextsParameter(Parameter[GeneratorState, List[str]]):
         }
 
 
-class MaxLengthParameter(Parameter[GeneratorState, int]):
+class MaxLengthParameter(Parameter[State, int]):
     @classproperty
     def schema(cls) -> Dict[str, Any]:
         return {
@@ -62,7 +60,7 @@ class MaxLengthParameter(Parameter[GeneratorState, int]):
         }
 
 
-class EndTokensParameter(Parameter[GeneratorState, List[str]]):
+class EndTokensParameter(Parameter[State, List[str]]):
     @classproperty
     def schema(cls) -> Dict[str, Any]:
         return {
@@ -72,7 +70,7 @@ class EndTokensParameter(Parameter[GeneratorState, List[str]]):
         }
 
 
-class BatchSizeParameter(Parameter[GeneratorState, int]):
+class BatchSizeParameter(Parameter[State, int]):
     @classproperty
     def schema(cls) -> Dict[str, Any]:
         return {
@@ -81,7 +79,7 @@ class BatchSizeParameter(Parameter[GeneratorState, int]):
         }
 
 
-class Generator(Configurable[GeneratorState]):
+class Generator(Configurable[State]):
     @classproperty
     def parameters(cls) -> Set[Parameter]:
         return {
@@ -92,8 +90,8 @@ class Generator(Configurable[GeneratorState]):
             BatchSizeParameter(),
         }
 
-    async def build_default_state(self) -> GeneratorState:
-        params = GeneratorParams(**self._kwargs)
+    async def build_default_state(self) -> State:
+        params = Params(**self._kwargs)
         sampler_cls = Sampler.for_category(params.sampler_type)
         sampler_params = params.samplers_params.get(params.sampler_type, {})
         if issubclass(sampler_cls, Configurable):
@@ -101,7 +99,7 @@ class Generator(Configurable[GeneratorState]):
             await sampler.init()
         else:
             sampler = sampler_cls(**sampler_params)
-        return GeneratorState(
+        return State(
             generator=SequenceGenerator(),
             sampler=sampler,
             samplers_params=params.samplers_params,
@@ -111,9 +109,14 @@ class Generator(Configurable[GeneratorState]):
             batch_size=params.batch_size,
         )
 
+    async def cleanup(self) -> None:
+        async with self.state.write_lock() as state:
+            if isinstance(state.sampler, Configurable):
+                await state.sampler.cleanup()
+
     @staticmethod
     def _get_contexts(
-        state: GeneratorState, tokenizer: PreTrainedTokenizerBase, n: int
+        state: State, tokenizer: PreTrainedTokenizerBase, n: int
     ) -> List[List[int]]:
         contexts = random.choices(state.contexts, k=n)
         contexts = [
@@ -126,14 +129,14 @@ class Generator(Configurable[GeneratorState]):
 
     @staticmethod
     def _get_end_tokens(
-        state: GeneratorState, tokenizer: PreTrainedTokenizerBase
+        state: State, tokenizer: PreTrainedTokenizerBase
     ) -> List[int]:
         tokens = [token or tokenizer.eos_token for token in state.end_tokens]
         return [tokenizer.encode(token)[0] for token in tokens]
 
     async def generate(
         self,
-        model: HuggingfaceModel,
+        model: HuggingfaceLanguageModel,
         n: int,
     ) -> AsyncIterable[GenerationResult]:
         async with self.state.read_lock() as state:
@@ -147,18 +150,11 @@ class Generator(Configurable[GeneratorState]):
                     state, model.tokenizer, batch_size
                 )
 
-                yield state.generator.generate(
+                yield await background(
+                    state.generator.generate,
                     model,
                     sampler,
                     contexts,
                     state.max_length,
                     end_tokens,
                 )
-                # yield await background(
-                #     state.generator.generate,
-                #     model,
-                #     sampler,
-                #     contexts,
-                #     state.max_length,
-                #     end_tokens,
-                # )

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "kilroy-module-huggingface"
-version = "0.2.1"
+version = "0.3.0"
 description = "kilroy module using Hugging Face models 🤗"
 readme = "README.md"
 authors = ["kilroy <kilroymail@pm.me>"]
