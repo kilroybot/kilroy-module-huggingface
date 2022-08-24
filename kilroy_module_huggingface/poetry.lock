@@ -102,14 +102,6 @@ optional = false
 python-versions = "*"
 
 [[package]]
-name = "diskcache"
-version = "5.4.0"
-description = "Disk Cache -- Disk and file backed persistent cache."
-category = "main"
-optional = false
-python-versions = ">=3"
-
-[[package]]
 name = "fifolock"
 version = "0.0.20"
 description = "A flexible low-level tool to make synchronisation primitives in asyncio Python"
@@ -249,14 +241,15 @@ test = ["pytest (>=7.0,<8.0)"]
 
 [[package]]
 name = "kilroy-module-pytorch-py-sdk"
-version = "0.2.1"
+version = "0.3.0"
 description = "SDK for kilroy modules using PyTorch 🧰"
 category = "main"
 optional = false
 python-versions = ">=3.9,<4.0"
 
 [package.dependencies]
-diskcache = ">=5,<6"
+kilroy-module-server-py-sdk = ">=0.7,<0.8"
+numpy = ">=1,<2"
 torch = ">=1,<2"
 
 [package.extras]
@@ -520,7 +513,7 @@ telegram = ["requests"]
 
 [[package]]
 name = "transformers"
-version = "4.21.1"
+version = "4.21.2"
 description = "State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow"
 category = "main"
 optional = false
@@ -626,7 +619,7 @@ test = ["pytest"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-content-hash = "be503561cdb5e2b056d56ce0aa75470d82d400771cf50bda8d444dce287762aa"
+content-hash = "3bba23cb7a7a8a102d2cd461de49c4000f0d8b8f7e446289a3006e6804154892"
 
 [metadata.files]
 aiostream = [
@@ -666,10 +659,6 @@ colorama = [
 deepmerge = [
     {file = "deepmerge-1.0.1-py3-none-any.whl", hash = "sha256:f851fff957697cb8f4580b465acf5c2d35841695306ff0abb9cb9c273ad76112"},
     {file = "deepmerge-1.0.1.tar.gz", hash = "sha256:4b44779ed3d2fb791bb181fc2683423496fea428abb7af37feb23286de7f0a1a"},
-]
-diskcache = [
-    {file = "diskcache-5.4.0-py3-none-any.whl", hash = "sha256:af3ec6d7f167bbef7b6c33d9ee22f86d3e8f2dd7131eb7c4703d8d91ccdc0cc4"},
-    {file = "diskcache-5.4.0.tar.gz", hash = "sha256:8879eb8c9b4a2509a5e633d2008634fb2b0b35c2b36192d89655dbde02419644"},
 ]
 fifolock = [
     {file = "fifolock-0.0.20-py3-none-any.whl", hash = "sha256:48ce70e50ceecd799e0346b6a92bb1d0301fd6b9ebeb3a2b3383e0ca7c3e73f5"},
@@ -715,8 +704,8 @@ kilroy-module-py-shared = [
     {file = "kilroy_module_py_shared-0.4.0-py3-none-any.whl", hash = "sha256:8dd0550e4f91ebd41b651bc4f185d109cc88b9489fc5d2a95b3089f1f8478729"},
 ]
 kilroy-module-pytorch-py-sdk = [
-    {file = "kilroy-module-pytorch-py-sdk-0.2.1.tar.gz", hash = "sha256:8f83ed6d6fb73b2242d8e84f107f40f99fcd787e82bb4ac080ac4243b64f96d5"},
-    {file = "kilroy_module_pytorch_py_sdk-0.2.1-py3-none-any.whl", hash = "sha256:aab43318a0014e5454402b214383fc33ad4ac059c5c0b461817f701db9cb6532"},
+    {file = "kilroy-module-pytorch-py-sdk-0.3.0.tar.gz", hash = "sha256:780c1d0a1fbe87da485ac9347872fc41250ab4bac73dbc861996375a26726b5f"},
+    {file = "kilroy_module_pytorch_py_sdk-0.3.0-py3-none-any.whl", hash = "sha256:dcff3b58607bdc8cfe12a0344e74e19ea87e9de4adc9480e60f424bc2d992f0d"},
 ]
 kilroy-module-server-py-sdk = [
     {file = "kilroy-module-server-py-sdk-0.7.1.tar.gz", hash = "sha256:2e62b2623b0eb2f7d4f67ca4da33decc5ca506ccbc3493544e3c870a27e22cc2"},
@@ -1094,8 +1083,8 @@ tqdm = [
     {file = "tqdm-4.64.0.tar.gz", hash = "sha256:40be55d30e200777a307a7585aee69e4eabb46b4ec6a4b4a5f2d9f11e7d5408d"},
 ]
 transformers = [
-    {file = "transformers-4.21.1-py3-none-any.whl", hash = "sha256:15785eda995f53d4e98ad92e84b7446dd7cf2426ba79a1ffa7511c723bd32dfb"},
-    {file = "transformers-4.21.1.tar.gz", hash = "sha256:20f895d7304a5c7f5af099f9300b326819df9cf2167cdfb754450facc0e094f6"},
+    {file = "transformers-4.21.2-py3-none-any.whl", hash = "sha256:c03c150857e2d8f18f6dcb51e3061207522425ad57a0a6dc6cde407226a45e3e"},
+    {file = "transformers-4.21.2.tar.gz", hash = "sha256:07f3df80144f7f032ad5d367507445980d4aa25855a5d658cfa47ac5fff32aca"},
 ]
 typer = [
     {file = "typer-0.4.2-py3-none-any.whl", hash = "sha256:023bae00d1baf358a6cc7cea45851639360bb716de687b42b0a4641cd99173f1"},
