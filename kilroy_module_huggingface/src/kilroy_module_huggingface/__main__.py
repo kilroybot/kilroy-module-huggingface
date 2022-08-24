@@ -11,11 +11,11 @@ from logging import Logger
 from typing import Dict, Optional
 
 import typer
-from kilroy_module_server_py_sdk import ModuleServer
+from kilroy_module_pytorch_py_sdk import ModuleServer
 from typer import FileText
 
 from kilroy_module_huggingface.config import get_config
-from kilroy_module_huggingface.module import HuggingfaceModule
+from kilroy_module_huggingface.modules import HuggingfaceModule
 
 cli = typer.Typer()  # this is actually callable and thus can be an entry point
 
@@ -36,12 +36,14 @@ def get_logger(verbosity: Verbosity) -> Logger:
 
 
 async def run(config: Dict, logger: Logger) -> None:
-    module = await HuggingfaceModule.build(**config.get("module", {}))
+    module_cls = HuggingfaceModule.for_category(config["moduleType"])
+    module = await module_cls.build(**config.get("moduleParams", {}))
+
     server = ModuleServer(module, logger)
 
     tasks = (
         asyncio.create_task(module.init()),
-        asyncio.create_task(server.run(**config.get("server", {}))),
+        asyncio.create_task(server.run(**config.get("serverParams", {}))),
     )
 
     try:
