@@ -32,3 +32,11 @@ class HuggingfaceTokenizer(Tokenizer):
 
     def decode(self, indices: List[int]) -> str:
         return self._tokenizer.decode(indices, skip_special_tokens=True)
+
+    @property
+    def start_token(self) -> int:
+        return self._tokenizer.bos_token_id
+
+    @property
+    def end_token(self) -> int:
+        return self._tokenizer.eos_token_id
