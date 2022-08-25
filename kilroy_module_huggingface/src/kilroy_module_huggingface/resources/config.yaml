@@ -5,8 +5,6 @@ moduleParams:
   batchSize: 32
   generatorParams:
     maxLength: 8
-    endTokens:
-      - "<|endoftext|>"
     batchSize: 32
 serverParams:
   host: localhost

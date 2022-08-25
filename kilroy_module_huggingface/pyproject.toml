@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "kilroy-module-huggingface"
-version = "0.3.1"
+version = "0.4.0"
 description = "kilroy module using Hugging Face models 🤗"
 readme = "README.md"
 authors = ["kilroy <kilroymail@pm.me>"]
@@ -12,7 +12,7 @@ documentation = "https://kilroybot.github.io/kilroy-module-huggingface"
 [tool.poetry.dependencies]
 python = "^3.9"
 typer = { version = "^0.4", extras = ["all"] }
-kilroy-module-pytorch-py-sdk = "~0.3"
+kilroy-module-pytorch-py-sdk = "~0.4"
 transformers = "^4.21"
 deepmerge = "^1.0"
 
