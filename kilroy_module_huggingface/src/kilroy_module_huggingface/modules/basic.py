@@ -1,13 +1,15 @@
+import json
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from kilroy_module_pytorch_py_sdk import (
     BasicModule,
     BasicModuleState,
     Codec,
-    Configurable,
     Generator,
     Metadata,
     Optimizer,
+    Savable,
     SerializableModel,
     background,
     classproperty,
@@ -56,32 +58,26 @@ class BasicHuggingfaceModule(BasicModule, HuggingfaceModule[BasicModuleState]):
             HuggingfaceTokenizer.from_path, params.model_name
         )
 
-    @staticmethod
+    @classmethod
     async def _build_optimizer(
-        params: Params, model: HuggingfaceLanguageModel
+        cls, params: Params, model: HuggingfaceLanguageModel
     ) -> Optimizer:
-        opt_cls = Optimizer.for_category(params.optimizer_type)
-        opt_params = params.optimizers_params.get(params.optimizer_type, {})
-        if issubclass(opt_cls, Configurable):
-            optimizer = await opt_cls.build(
-                params=model.parameters(), **opt_params
-            )
-            await optimizer.init()
-        else:
-            optimizer = opt_cls(model.parameters(), **opt_params)
-        return optimizer
+        return await cls.build_categorizable(
+            Optimizer,
+            params.optimizer_type,
+            parameters=model.parameters(),
+            **params.optimizers_params.get(params.optimizer_type, {}),
+        )
 
-    @staticmethod
-    async def _build_generator(params: Params) -> Generator:
-        generator = await Generator.build(**params.generator_params)
-        await generator.init()
-        return generator
+    @classmethod
+    async def _build_generator(cls, params: Params) -> Generator:
+        return await cls.build_configurable(
+            Generator, **params.generator_params
+        )
 
-    @staticmethod
-    async def _build_codec(params: Params) -> Codec:
-        codec = await Codec.build(**params.codec_params)
-        await codec.init()
-        return codec
+    @classmethod
+    async def _build_codec(cls, params: Params) -> Codec:
+        return await cls.build_configurable(Codec, **params.generator_params)
 
     async def build_default_state(self) -> BasicModuleState:
         params = Params(**self._kwargs)
@@ -102,4 +98,65 @@ class BasicHuggingfaceModule(BasicModule, HuggingfaceModule[BasicModuleState]):
             reinforced_score_metric=await ReinforcedScoreMetric.build(),
             epoch_supervised_losses=[],
             epoch_reinforced_scores=[],
+        )
+
+    @classmethod
+    async def save_state(
+        cls, state: BasicModuleState, directory: Path
+    ) -> None:
+        if isinstance(state.model, Savable):
+            await state.model.save(directory / "model")
+        if isinstance(state.tokenizer, Savable):
+            await state.tokenizer.save(directory / "tokenizer")
+        if isinstance(state.optimizer, Savable):
+            await state.optimizer.save(directory / "optimizer")
+        await state.generator.save(directory / "generator")
+        await state.codec.save(directory / "codec")
+
+        state_dict = {
+            "optimizer_type": state.optimizer.category,
+            "optimizers_params": state.optimizers_params,
+            "batch_size": state.batch_size,
+            "epoch": state.epoch,
+            "epoch_supervised_losses": state.epoch_supervised_losses,
+            "epoch_reinforced_scores": state.epoch_reinforced_scores,
+        }
+
+        with (directory / "state.json").open("w") as f:
+            json.dump(state_dict, f)
+
+    async def load_saved_state(self, directory: Path) -> BasicModuleState:
+        with (directory / "state.json").open("r") as f:
+            state_dict = json.load(f)
+
+        model = await self.load_generic(
+            directory / "model", HuggingfaceLanguageModel
+        )
+
+        return BasicModuleState(
+            model=model,
+            tokenizer=await self.load_generic(
+                directory / "tokenizer", HuggingfaceTokenizer
+            ),
+            optimizer=await self.load_generic(
+                directory / "optimizer",
+                Optimizer,
+                category=state_dict["optimizer_type"],
+                parameters=model.parameters(),
+                **state_dict["optimizers_params"].get(
+                    state_dict["optimizer_type"], {}
+                ),
+            ),
+            optimizers_params=state_dict["optimizers_params"],
+            generator=await self.load_generic(
+                directory / "generator", Generator
+            ),
+            codec=await self.load_generic(directory / "codec", Codec),
+            results_cache={},
+            batch_size=state_dict["batch_size"],
+            epoch=state_dict["epoch"],
+            supervised_loss_metric=await SupervisedLossMetric.build(),
+            reinforced_score_metric=await ReinforcedScoreMetric.build(),
+            epoch_supervised_losses=state_dict["epoch_supervised_losses"],
+            epoch_reinforced_scores=state_dict["epoch_reinforced_scores"],
         )
