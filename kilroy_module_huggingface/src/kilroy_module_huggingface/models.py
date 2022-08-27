@@ -1,11 +1,15 @@
+import json
 import re
-from abc import ABC
-from typing import Optional
+from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Optional, Type, TypeVar
 
 import torch
 from kilroy_module_pytorch_py_sdk import (
     LanguageModel,
     RewardModel,
+    Savable,
+    background,
     pack_padded,
     unpack_to_padded,
 )
@@ -18,6 +22,10 @@ from transformers import (
     PreTrainedModel,
 )
 
+HuggingfaceModelBaseType = TypeVar(
+    "HuggingfaceModelBaseType", bound="HuggingfaceModelBase"
+)
+
 
 def make_mask(x: Tensor, lengths: Tensor) -> Tensor:
     indices = torch.arange(x.shape[-1]).repeat((len(x), 1))
@@ -25,7 +33,7 @@ def make_mask(x: Tensor, lengths: Tensor) -> Tensor:
     return indices < lengths
 
 
-class HuggingfaceModelBase(ABC):
+class HuggingfaceModelBase(Savable, ABC):
     def __init__(
         self,
         model: PreTrainedModel,
@@ -34,6 +42,33 @@ class HuggingfaceModelBase(ABC):
         super().__init__()
         self._model = model
         self._pad_token_id = pad_token_id
+
+    async def save(self, directory: Path) -> None:
+        model_directory = directory / "model"
+        config_path = directory / "config.json"
+        model_directory.mkdir(parents=True, exist_ok=True)
+
+        await background(self._model.save_pretrained, model_directory)
+        with open(config_path, "w") as f:
+            json.dump({"pad_token_id": self._pad_token_id}, f)
+
+    @classmethod
+    async def from_saved(
+        cls: Type[HuggingfaceModelBaseType], directory: Path, **kwargs
+    ) -> HuggingfaceModelBaseType:
+        model_directory = directory / "model"
+        config_path = directory / "config.json"
+
+        with open(config_path, "r") as f:
+            config = json.load(f)
+
+        model = await background(cls._load_saved_model, model_directory)
+        return cls(model, config["pad_token_id"])
+
+    @classmethod
+    @abstractmethod
+    def _load_saved_model(cls, directory: Path) -> PreTrainedModel:
+        pass
 
     @property
     def base_model(self) -> nn.Module:
@@ -49,6 +84,10 @@ class HuggingfaceModelBase(ABC):
 
 
 class HuggingfaceLanguageModel(HuggingfaceModelBase, LanguageModel):
+    @classmethod
+    def _load_saved_model(cls, directory: Path) -> PreTrainedModel:
+        return AutoModelForCausalLM.from_pretrained(directory)
+
     @classmethod
     def from_path(cls, path: str) -> "HuggingfaceLanguageModel":
         model = AutoModelForCausalLM.from_pretrained(path)
@@ -75,6 +114,10 @@ class HuggingfaceLanguageModel(HuggingfaceModelBase, LanguageModel):
 
 
 class HuggingfaceRegressionModel(HuggingfaceModelBase, RewardModel):
+    @classmethod
+    def _load_saved_model(cls, directory: Path) -> PreTrainedModel:
+        return AutoModelForSequenceClassification.from_pretrained(directory)
+
     @classmethod
     def from_path(cls, path: str) -> "HuggingfaceRegressionModel":
         config = AutoConfig.from_pretrained(path)

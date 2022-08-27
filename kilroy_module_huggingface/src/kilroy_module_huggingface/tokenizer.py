@@ -1,13 +1,23 @@
+from pathlib import Path
 from typing import List
 
-from kilroy_module_pytorch_py_sdk import Tokenizer
+from kilroy_module_pytorch_py_sdk import Savable, Tokenizer
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 
-class HuggingfaceTokenizer(Tokenizer):
+class HuggingfaceTokenizer(Savable, Tokenizer):
     def __init__(self, tokenizer: PreTrainedTokenizerBase) -> None:
         super().__init__()
         self._tokenizer = tokenizer
+
+    async def save(self, directory: Path) -> None:
+        self._tokenizer.save_pretrained(directory)
+
+    @classmethod
+    async def from_saved(
+        cls, directory: Path, **kwargs
+    ) -> "HuggingfaceTokenizer":
+        return cls(AutoTokenizer.from_pretrained(directory))
 
     @classmethod
     def from_path(cls, path: str) -> "HuggingfaceTokenizer":

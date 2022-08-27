@@ -12,7 +12,7 @@ StateType = TypeVar("StateType")
 
 
 class HuggingfaceModule(
-    Categorizable, Module[StateType], Generic[StateType], ABC
+    Categorizable, Module[StateType], ABC, Generic[StateType]
 ):
     @classproperty
     def category(cls) -> str:
