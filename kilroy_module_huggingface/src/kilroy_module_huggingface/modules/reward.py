@@ -1,6 +1,7 @@
 import asyncio
 import json
 from asyncio import Queue
+from functools import partial
 from pathlib import Path
 from typing import Any, Coroutine, Dict, Optional
 
@@ -10,8 +11,13 @@ from kilroy_module_pytorch_py_sdk import (
     Metadata,
     Optimizer,
     RewardModelModule,
-    RewardModelModuleState,
+    RewardModelModuleLanguageModelState as LanguageModelState,
+    RewardModelModuleMetricsState as MetricsState,
+    RewardModelModuleReportsState as ReportsState,
+    RewardModelModuleRewardModelState as RewardModelState,
+    RewardModelModuleState as State,
     Savable,
+    Scheduler,
     SerializableModel,
     background,
     classproperty,
@@ -36,6 +42,8 @@ class ModelParams(SerializableModel):
     freeze: Optional[str] = None
     optimizer_type: str = "adam"
     optimizers_params: Dict[str, Dict[str, Any]] = {}
+    scheduler_type: Optional[str] = None
+    schedulers_params: Dict[str, Dict[str, Any]] = {}
 
 
 class Params(SerializableModel):
@@ -49,7 +57,7 @@ class Params(SerializableModel):
 
 
 class RewardModelHuggingfaceModule(
-    RewardModelModule, HuggingfaceModule[RewardModelModuleState]
+    RewardModelModule, HuggingfaceModule[State]
 ):
     @classproperty
     def metadata(cls) -> Metadata:
@@ -96,7 +104,7 @@ class RewardModelHuggingfaceModule(
     async def _build_language_model_optimizer(
         cls, params: Params, model: HuggingfaceLanguageModel
     ) -> Optimizer:
-        return await cls.build_categorizable(
+        return await cls._build_categorizable(
             Optimizer,
             params.language_model_params.optimizer_type,
             parameters=model.parameters(),
@@ -109,7 +117,7 @@ class RewardModelHuggingfaceModule(
     async def _build_reward_model_optimizer(
         cls, params: Params, model: HuggingfaceRegressionModel
     ) -> Optimizer:
-        return await cls.build_categorizable(
+        return await cls._build_categorizable(
             Optimizer,
             params.reward_model_params.optimizer_type,
             parameters=model.parameters(),
@@ -119,47 +127,111 @@ class RewardModelHuggingfaceModule(
         )
 
     @classmethod
+    async def _build_language_model_scheduler(
+        cls, params: Params, optimizer: Optimizer
+    ) -> Optional[Scheduler]:
+        if params.language_model_params.scheduler_type is None:
+            return None
+        return await cls._build_categorizable(
+            Scheduler,
+            params.language_model_params.scheduler_type,
+            optimizer=await optimizer.get(),
+            **params.language_model_params.schedulers_params.get(
+                params.language_model_params.scheduler_type, {}
+            ),
+        )
+
+    @classmethod
+    async def _build_reward_model_scheduler(
+        cls, params: Params, optimizer: Optimizer
+    ) -> Optional[Scheduler]:
+        if params.reward_model_params.scheduler_type is None:
+            return None
+        return await cls._build_categorizable(
+            Scheduler,
+            params.reward_model_params.scheduler_type,
+            optimizer=await optimizer.get(),
+            **params.reward_model_params.schedulers_params.get(
+                params.reward_model_params.scheduler_type, {}
+            ),
+        )
+
+    @classmethod
+    async def _build_language_model_state(
+        cls, params: Params
+    ) -> LanguageModelState:
+        model = await cls._build_language_model(params)
+        optimizer = await cls._build_language_model_optimizer(params, model)
+        model.freeze(params.language_model_params.freeze)
+        return LanguageModelState(
+            model=model,
+            tokenizer=await cls._build_language_model_tokenizer(params),
+            optimizer=optimizer,
+            optimizers_params=params.language_model_params.optimizers_params,
+            scheduler=await cls._build_language_model_scheduler(
+                params, optimizer
+            ),
+            schedulers_params=params.language_model_params.schedulers_params,
+        )
+
+    @classmethod
+    async def _build_reward_model_state(
+        cls, params: Params
+    ) -> RewardModelState:
+        model = await cls._build_reward_model(params)
+        optimizer = await cls._build_reward_model_optimizer(params, model)
+        model.freeze(params.reward_model_params.freeze)
+        return RewardModelState(
+            model=model,
+            tokenizer=await cls._build_reward_model_tokenizer(params),
+            optimizer=optimizer,
+            optimizers_params=params.reward_model_params.optimizers_params,
+            scheduler=await cls._build_reward_model_scheduler(
+                params, optimizer
+            ),
+            schedulers_params=params.reward_model_params.schedulers_params,
+        )
+
+    @classmethod
     async def _build_frontend_generator(cls, params: Params) -> Generator:
-        return await cls.build_configurable(
+        return await cls._build_configurable(
             Generator, **params.frontend_generator_params
         )
 
     @classmethod
     async def _build_backend_generator(cls, params: Params) -> Generator:
-        return await cls.build_configurable(
+        return await cls._build_configurable(
             Generator, **params.backend_generator_params
         )
 
     @classmethod
     async def _build_codec(cls, params: Params) -> Codec:
-        return await cls.build_configurable(Codec, **params.codec_params)
+        return await cls._build_configurable(Codec, **params.codec_params)
 
-    async def build_default_state(self) -> RewardModelModuleState:
+    @staticmethod
+    async def _build_metrics() -> MetricsState:
+        return MetricsState(
+            supervised_loss_metric=await SupervisedLossMetric.build(),
+            reinforced_score_metric=await ReinforcedScoreMetric.build(),
+            reward_model_loss_metric=await RewardModelLossMetric.build(),
+            reward_model_score_metric=await RewardModelScoreMetric.build(),
+        )
+
+    @staticmethod
+    async def _build_reports() -> ReportsState:
+        return ReportsState(
+            epoch_supervised_losses=[],
+            epoch_reinforced_scores=[],
+            epoch_reward_model_losses=[],
+            epoch_reward_model_scores=[],
+        )
+
+    async def _build_default_state(self) -> State:
         params = Params(**self._kwargs)
-        language_model = await self._build_language_model(params)
-        reward_model = await self._build_reward_model(params)
-        language_model_optimizer = await self._build_language_model_optimizer(
-            params, language_model
-        )
-        reward_model_optimizer = await self._build_reward_model_optimizer(
-            params, reward_model
-        )
-        language_model.freeze(params.language_model_params.freeze)
-        reward_model.freeze(params.reward_model_params.freeze)
         coroutine_queue = Queue()
-        return RewardModelModuleState(
-            language_model=language_model,
-            reward_model=reward_model,
-            language_model_tokenizer=await self._build_language_model_tokenizer(
-                params
-            ),
-            reward_model_tokenizer=await self._build_reward_model_tokenizer(
-                params
-            ),
-            language_model_optimizer=language_model_optimizer,
-            language_model_optimizers_params=params.language_model_params.optimizers_params,
-            reward_model_optimizer=reward_model_optimizer,
-            reward_model_optimizers_params=params.reward_model_params.optimizers_params,
+        return State(
+            language_model=await self._build_language_model_state(params),
+            reward_model=await self._build_reward_model_state(params),
             frontend_generator=await self._build_frontend_generator(params),
             backend_generator=await self._build_backend_generator(params),
             codec=await self._build_codec(params),
@@ -167,132 +239,328 @@ class RewardModelHuggingfaceModule(
             batch_size=params.batch_size,
             sample_size=params.sample_size,
             epoch=0,
-            supervised_loss_metric=await SupervisedLossMetric.build(),
-            reinforced_score_metric=await ReinforcedScoreMetric.build(),
-            reward_model_loss_metric=await RewardModelLossMetric.build(),
-            reward_model_score_metric=await RewardModelScoreMetric.build(),
-            epoch_supervised_losses=[],
-            epoch_reinforced_scores=[],
-            epoch_reward_model_losses=[],
-            epoch_reward_model_scores=[],
+            metrics=await self._build_metrics(),
+            reports=await self._build_reports(),
             coroutine_queue=coroutine_queue,
             worker_task=asyncio.create_task(self._work(coroutine_queue)),
         )
 
-    @classmethod
-    async def save_state(
-        cls, state: RewardModelModuleState, directory: Path
+    @staticmethod
+    async def _save_language_model_state(
+        state: State, directory: Path
     ) -> None:
-        lm_dir = directory / "language_model"
-        lm_dir.mkdir(parents=True, exist_ok=True)
-        rm_dir = directory / "reward_model"
-        rm_dir.mkdir(parents=True, exist_ok=True)
+        directory = directory / "language_model"
+        directory.mkdir(parents=True, exist_ok=True)
 
         if isinstance(state.language_model, Savable):
-            await state.language_model.save(lm_dir / "model")
-        if isinstance(state.language_model_tokenizer, Savable):
-            await state.language_model_tokenizer.save(lm_dir / "tokenizer")
-        if isinstance(state.language_model_optimizer, Savable):
-            await state.language_model_optimizer.save(lm_dir / "optimizer")
+            await state.language_model.save(directory / "model")
+        if isinstance(state.language_model.tokenizer, Savable):
+            await state.language_model.tokenizer.save(directory / "tokenizer")
+        if isinstance(state.language_model.optimizer, Savable):
+            await state.language_model.optimizer.save(directory / "optimizer")
+        if isinstance(state.language_model.scheduler, Savable):
+            await state.language_model.scheduler.save(directory / "scheduler")
 
-        if isinstance(state.reward_model, Savable):
-            await state.reward_model.save(rm_dir / "model")
-        if isinstance(state.reward_model_tokenizer, Savable):
-            await state.reward_model_tokenizer.save(rm_dir / "tokenizer")
-        if isinstance(state.reward_model_optimizer, Savable):
-            await state.reward_model_optimizer.save(rm_dir / "optimizer")
+    @staticmethod
+    async def _save_reward_model_state(state: State, directory: Path) -> None:
+        directory = directory / "reward_model"
+        directory.mkdir(parents=True, exist_ok=True)
 
+        if isinstance(state.language_model, Savable):
+            await state.language_model.save(directory / "model")
+        if isinstance(state.language_model.tokenizer, Savable):
+            await state.language_model.tokenizer.save(directory / "tokenizer")
+        if isinstance(state.language_model.optimizer, Savable):
+            await state.language_model.optimizer.save(directory / "optimizer")
+        if isinstance(state.language_model.scheduler, Savable):
+            await state.language_model.scheduler.save(directory / "scheduler")
+
+    @staticmethod
+    async def _save_frontend_generator(state: State, directory: Path) -> None:
         await state.frontend_generator.save(directory / "frontend_generator")
+
+    @staticmethod
+    async def _save_backend_generator(state: State, directory: Path) -> None:
         await state.backend_generator.save(directory / "backend_generator")
+
+    @staticmethod
+    async def _save_codec(state: State, directory: Path) -> None:
         await state.codec.save(directory / "codec")
 
-        state_dict = {
-            "language_model_optimizer_type": state.language_model_optimizer.category,
-            "language_model_optimizers_params": state.language_model_optimizers_params,
-            "reward_model_optimizer_type": state.reward_model_optimizer.category,
-            "reward_model_optimizers_params": state.reward_model_optimizers_params,
+    @staticmethod
+    async def _create_state_dict(state: State) -> Dict[str, Any]:
+        return {
+            "language_model_optimizer_type": state.language_model.optimizer.category,
+            "language_model_optimizers_params": state.language_model.optimizers_params,
+            "reward_model_optimizer_type": state.reward_model.optimizer.category,
+            "reward_model_optimizers_params": state.reward_model.optimizers_params,
+            "language_model_scheduler_type": state.language_model.scheduler.category
+            if state.language_model.scheduler is not None
+            else None,
+            "language_model_schedulers_params": state.language_model.schedulers_params,
+            "reward_model_scheduler_type": state.reward_model.scheduler.category
+            if state.reward_model.scheduler is not None
+            else None,
+            "reward_model_schedulers_params": state.reward_model.schedulers_params,
             "batch_size": state.batch_size,
             "sample_size": state.sample_size,
             "epoch": state.epoch,
-            "epoch_supervised_losses": state.epoch_supervised_losses,
-            "epoch_reinforced_scores": state.epoch_reinforced_scores,
-            "epoch_reward_model_losses": state.epoch_reward_model_losses,
-            "epoch_reward_model_scores": state.epoch_reward_model_scores,
+            "epoch_supervised_losses": state.reports.epoch_supervised_losses,
+            "epoch_reinforced_scores": state.reports.epoch_reinforced_scores,
+            "epoch_reward_model_losses": state.reports.epoch_reward_model_losses,
+            "epoch_reward_model_scores": state.reports.epoch_reward_model_scores,
         }
 
-        with (directory / "state.json").open("w") as f:
+    @staticmethod
+    async def _save_state_dict(
+        directory: Path, state_dict: Dict[str, Any]
+    ) -> None:
+        with open(directory / "state.json", "w") as f:
             json.dump(state_dict, f)
 
-    async def load_saved_state(
-        self, directory: Path
-    ) -> RewardModelModuleState:
-        with (directory / "state.json").open("r") as f:
-            state_dict = json.load(f)
+    @classmethod
+    async def _save_state(cls, state: State, directory: Path) -> None:
+        await cls._save_language_model_state(state, directory)
+        await cls._save_reward_model_state(state, directory)
+        await cls._save_frontend_generator(state, directory)
+        await cls._save_backend_generator(state, directory)
+        await cls._save_codec(state, directory)
 
-        language_model = await self.load_generic(
+        state_dict = await cls._create_state_dict(state)
+        await cls._save_state_dict(directory, state_dict)
+
+    @staticmethod
+    async def _load_state_dict(directory: Path) -> Dict[str, Any]:
+        with open(directory / "state.json", "r") as f:
+            return json.load(f)
+
+    @classmethod
+    async def _load_language_model(
+        cls, directory: Path, params: Params
+    ) -> HuggingfaceLanguageModel:
+        return await cls._load_generic(
             directory / "language_model" / "model",
             HuggingfaceLanguageModel,
+            default=partial(cls._build_language_model, params),
         )
-        reward_model = await self.load_generic(
+
+    @classmethod
+    async def _load_language_model_optimizer(
+        cls,
+        directory: Path,
+        state_dict: Dict[str, Any],
+        params: Params,
+        model: HuggingfaceLanguageModel,
+    ) -> Optimizer:
+        return await cls._load_generic(
+            directory / "language_model" / "optimizer",
+            Optimizer,
+            category=state_dict["language_model_optimizer_type"],
+            default=partial(
+                cls._build_language_model_optimizer,
+                params,
+                model,
+            ),
+            parameters=model.parameters(),
+        )
+
+    @classmethod
+    async def _load_language_model_tokenizer(
+        cls, directory: Path, params: Params
+    ) -> HuggingfaceTokenizer:
+        return await cls._load_generic(
+            directory / "language_model" / "tokenizer",
+            HuggingfaceTokenizer,
+            default=partial(cls._build_language_model_tokenizer, params),
+        )
+
+    @classmethod
+    async def _load_language_model_scheduler(
+        cls,
+        directory: Path,
+        state_dict: Dict[str, Any],
+        params: Params,
+        optimizer: Optimizer,
+    ) -> Optional[Scheduler]:
+        if state_dict["language_model_scheduler_type"] is None:
+            return None
+        return await cls._load_generic(
+            directory / "language_model" / "scheduler",
+            Scheduler,
+            category=state_dict["language_model_scheduler_type"],
+            default=partial(
+                cls._build_language_model_scheduler,
+                params,
+                optimizer,
+            ),
+            optimizer=await optimizer.get(),
+        )
+
+    @classmethod
+    async def _load_language_model_state(
+        cls, directory: Path, state_dict: Dict[str, Any], params: Params
+    ) -> LanguageModelState:
+        model = await cls._load_language_model(directory, params)
+        optimizer = await cls._load_language_model_optimizer(
+            directory, state_dict, params, model
+        )
+        return LanguageModelState(
+            model=model,
+            tokenizer=await cls._load_language_model_tokenizer(
+                directory, params
+            ),
+            optimizer=optimizer,
+            optimizers_params=state_dict["language_model_optimizers_params"],
+            scheduler=await cls._load_language_model_scheduler(
+                directory, state_dict, params, optimizer
+            ),
+            schedulers_params=state_dict["language_model_schedulers_params"],
+        )
+
+    @classmethod
+    async def _load_reward_model(
+        cls, directory: Path, params: Params
+    ) -> HuggingfaceRegressionModel:
+        return await cls._load_generic(
             directory / "reward_model" / "model",
             HuggingfaceRegressionModel,
+            default=partial(cls._build_reward_model, params),
         )
-        coroutine_queue = Queue()
 
-        return RewardModelModuleState(
-            language_model=language_model,
-            reward_model=reward_model,
-            language_model_tokenizer=await self.load_generic(
-                directory / "language_model" / "tokenizer",
-                HuggingfaceTokenizer,
+    @classmethod
+    async def _load_reward_model_optimizer(
+        cls,
+        directory: Path,
+        state_dict: Dict[str, Any],
+        params: Params,
+        model: HuggingfaceRegressionModel,
+    ) -> Optimizer:
+        return await cls._load_generic(
+            directory / "reward_model" / "optimizer",
+            Optimizer,
+            category=state_dict["reward_model_optimizer_type"],
+            default=partial(
+                cls._build_reward_model_optimizer,
+                params,
+                model,
             ),
-            reward_model_tokenizer=await self.load_generic(
-                directory / "reward_model" / "tokenizer",
-                HuggingfaceTokenizer,
+            parameters=model.parameters(),
+        )
+
+    @classmethod
+    async def _load_reward_model_tokenizer(
+        cls, directory: Path, params: Params
+    ) -> HuggingfaceTokenizer:
+        return await cls._load_generic(
+            directory / "reward_model" / "tokenizer",
+            HuggingfaceTokenizer,
+            default=partial(cls._build_reward_model_tokenizer, params),
+        )
+
+    @classmethod
+    async def _load_reward_model_scheduler(
+        cls,
+        directory: Path,
+        state_dict: Dict[str, Any],
+        params: Params,
+        optimizer: Optimizer,
+    ) -> Optional[Scheduler]:
+        if state_dict["reward_model_scheduler_type"] is None:
+            return None
+        return await cls._load_generic(
+            directory / "reward_model" / "scheduler",
+            Scheduler,
+            category=state_dict["reward_model_scheduler_type"],
+            default=partial(
+                cls._build_reward_model_scheduler,
+                params,
+                optimizer,
             ),
-            language_model_optimizer=await self.load_generic(
-                directory / "language_model" / "optimizer",
-                Optimizer,
-                category=state_dict["language_model_optimizer_type"],
-                parameters=language_model.parameters(),
-                **state_dict["language_model_optimizers_params"].get(
-                    state_dict["language_model_optimizer_type"], {}
-                ),
+            optimizer=await optimizer.get(),
+        )
+
+    @classmethod
+    async def _load_reward_model_state(
+        cls, directory: Path, state_dict: Dict[str, Any], params: Params
+    ) -> RewardModelState:
+        model = await cls._load_reward_model(directory, params)
+        optimizer = await cls._load_reward_model_optimizer(
+            directory, state_dict, params, model
+        )
+        return RewardModelState(
+            model=model,
+            tokenizer=await cls._load_reward_model_tokenizer(
+                directory, params
             ),
-            language_model_optimizers_params=state_dict[
-                "language_model_optimizers_params"
-            ],
-            reward_model_optimizer=await self.load_generic(
-                directory / "reward_model" / "optimizer",
-                Optimizer,
-                category=state_dict["reward_model_optimizer_type"],
-                parameters=reward_model.parameters(),
-                **state_dict["reward_model_optimizers_params"].get(
-                    state_dict["reward_model_optimizer_type"], {}
-                ),
+            optimizer=optimizer,
+            optimizers_params=state_dict["reward_model_optimizers_params"],
+            scheduler=await cls._load_reward_model_scheduler(
+                directory, state_dict, params, optimizer
             ),
-            reward_model_optimizers_params=state_dict[
-                "reward_model_optimizers_params"
-            ],
-            frontend_generator=await self.load_generic(
-                directory / "frontend_generator", Generator
+            schedulers_params=state_dict["reward_model_schedulers_params"],
+        )
+
+    @classmethod
+    async def _load_frontend_generator(
+        cls, directory: Path, params: Params
+    ) -> Generator:
+        return await cls._load_generic(
+            directory / "frontend_generator",
+            Generator,
+            default=partial(cls._build_frontend_generator, params),
+        )
+
+    @classmethod
+    async def _load_backend_generator(
+        cls, directory: Path, params: Params
+    ) -> Generator:
+        return await cls._load_generic(
+            directory / "backend_generator",
+            Generator,
+            default=partial(cls._build_backend_generator, params),
+        )
+
+    @classmethod
+    async def _load_codec(cls, directory: Path, params: Params) -> Codec:
+        return await cls._load_generic(
+            directory / "codec",
+            Codec,
+            default=partial(cls._build_codec, params),
+        )
+
+    async def _load_saved_state(self, directory: Path) -> State:
+        state_dict = await self._load_state_dict(directory)
+        params = Params(**self._kwargs)
+        coroutine_queue = Queue()
+        return State(
+            language_model=await self._load_language_model_state(
+                directory, state_dict, params
             ),
-            backend_generator=await self.load_generic(
-                directory / "backend_generator", Generator
+            reward_model=await self._load_reward_model_state(
+                directory, state_dict, params
             ),
-            codec=await self.load_generic(directory / "codec", Codec),
+            frontend_generator=await self._load_frontend_generator(
+                directory, params
+            ),
+            backend_generator=await self._load_backend_generator(
+                directory, params
+            ),
+            codec=await self._load_codec(directory, params),
             results_cache={},
             batch_size=state_dict["batch_size"],
             sample_size=state_dict["sample_size"],
             epoch=state_dict["epoch"],
-            supervised_loss_metric=await SupervisedLossMetric.build(),
-            reinforced_score_metric=await ReinforcedScoreMetric.build(),
-            reward_model_loss_metric=await RewardModelLossMetric.build(),
-            reward_model_score_metric=await RewardModelScoreMetric.build(),
-            epoch_supervised_losses=state_dict["epoch_supervised_losses"],
-            epoch_reinforced_scores=state_dict["epoch_reinforced_scores"],
-            epoch_reward_model_losses=state_dict["epoch_reward_model_losses"],
-            epoch_reward_model_scores=state_dict["epoch_reward_model_scores"],
+            metrics=await self._build_metrics(),
+            reports=ReportsState(
+                epoch_supervised_losses=state_dict["epoch_supervised_losses"],
+                epoch_reinforced_scores=state_dict["epoch_reinforced_scores"],
+                epoch_reward_model_losses=state_dict[
+                    "epoch_reward_model_losses"
+                ],
+                epoch_reward_model_scores=state_dict[
+                    "epoch_reward_model_scores"
+                ],
+            ),
             coroutine_queue=coroutine_queue,
             worker_task=asyncio.create_task(self._work(coroutine_queue)),
         )
