@@ -5,5 +5,5 @@
 !kilroy_module_huggingface/poetry.lock
 !kilroy_module_huggingface/LICENSE
 !kilroy_module_huggingface/README.md
-!environment.yml
+!environment.yaml
 !requirements.txt

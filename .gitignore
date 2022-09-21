@@ -130,5 +130,7 @@ dmypy.json
 
 .idea/
 
+!.gitkeep
+
 /config*.yaml
 /kilroy_module_huggingface/config*.yaml
