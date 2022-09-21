@@ -9,8 +9,8 @@ RUN python3 -m pip install --no-cache-dir -r /tmp/requirements.txt
 # create new environment
 # see: https://jcristharif.com/conda-docker-tips.html
 # warning: for some reason conda can hang on "Executing transaction" for a couple of minutes
-COPY environment.yml /tmp/environment.yml
-RUN conda env create -f /tmp/environment.yml && \
+COPY environment.yaml /tmp/environment.yaml
+RUN conda env create -f /tmp/environment.yaml && \
     conda clean -afy && \
     find /opt/conda/ -follow -type f -name '*.a' -delete && \
     find /opt/conda/ -follow -type f -name '*.pyc' -delete && \
@@ -23,12 +23,10 @@ SHELL ["conda", "run", "--no-capture-output", "-n", "kilroy-module-huggingface",
 COPY ./kilroy_module_huggingface/pyproject.toml ./kilroy_module_huggingface/poetry.lock /tmp/kilroy_module_huggingface/
 WORKDIR /tmp/kilroy_module_huggingface
 
-ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "kilroy-module-huggingface"]
-
 FROM base AS test
 
 # install dependencies only (notice that no source code is present yet) and delete cache
-RUN poetry install --no-root --extras test && \
+RUN poetry install --no-root --only main,test && \
     rm -rf ~/.cache/pypoetry
 
 # add source, tests and necessary files
@@ -40,12 +38,13 @@ COPY ./kilroy_module_huggingface/LICENSE ./kilroy_module_huggingface/README.md /
 RUN poetry build -f wheel && \
     python -m pip install --no-deps --no-index --no-cache-dir --find-links=dist kilroy-module-huggingface
 
-CMD ["pytest"]
+ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "kilroy-module-huggingface", "pytest"]
+CMD []
 
 FROM base AS production
 
 # install dependencies only (notice that no source code is present yet) and delete cache
-RUN poetry install --no-root && \
+RUN poetry install --no-root --only main && \
     rm -rf ~/.cache/pypoetry
 
 # add source and necessary files
@@ -56,4 +55,5 @@ COPY ./kilroy_module_huggingface/LICENSE ./kilroy_module_huggingface/README.md /
 RUN poetry build -f wheel && \
     python -m pip install --no-deps --no-index --no-cache-dir --find-links=dist kilroy-module-huggingface
 
-CMD ["kilroy-module-huggingface"]
+ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "kilroy-module-huggingface", "kilroy-module-huggingface"]
+CMD []

@@ -1,31 +1,73 @@
-from copy import deepcopy
-from typing import Any, Dict, Optional, TextIO
+from pathlib import Path
+from typing import Annotated, Iterable, Literal, Optional, TextIO, Tuple, Union
 
-import yaml
-from deepmerge import Merger
+from omegaconf import OmegaConf
+from platformdirs import user_cache_dir
+from pydantic import BaseModel, Extra, Field
+from pydantic.env_settings import BaseSettings, SettingsSourceCallable
 
 from kilroy_module_huggingface import resource_text
-
-_DEFAULT_MERGER = Merger(
-    [(list, ["override"]), (dict, ["merge"]), (set, ["override"])],
-    ["override"],
-    ["override"],
+from kilroy_module_huggingface.modules.basic import Params as BasicParams
+from kilroy_module_huggingface.modules.reward import (
+    Params as RewardModelParams,
 )
 
-
-def _merge_configs(
-    default_config: Dict[str, Any],
-    user_config: Dict[str, any],
-    merger: Merger = _DEFAULT_MERGER,
-    **kwargs,
-) -> Dict[str, Any]:
-    config = deepcopy(default_config)
-    merger.merge(config, user_config)
-    merger.merge(config, kwargs)
-    return config
+CACHE_DIR = Path(user_cache_dir("kilroybot"))
 
 
-def get_config(f: Optional[TextIO] = None, **kwargs) -> Dict[str, Any]:
-    config = yaml.safe_load(resource_text("config.yaml"))
-    user_config = yaml.safe_load(f) if f else {}
-    return _merge_configs(config, user_config, **kwargs)
+class BaseConfig(BaseSettings):
+    class Config:
+        env_prefix = "kilroy_module_huggingface_"
+        env_nested_delimiter = "__"
+        env_file = ".env"
+        extra = Extra.allow
+
+        @classmethod
+        def customise_sources(
+            cls,
+            init_settings: SettingsSourceCallable,
+            env_settings: SettingsSourceCallable,
+            file_secret_settings: SettingsSourceCallable,
+        ) -> Tuple[SettingsSourceCallable, ...]:
+            return env_settings, init_settings, file_secret_settings
+
+
+class ServerParams(BaseModel):
+    host: str = "0.0.0.0"
+    port: int = 11000
+
+
+class CommonConfig(BaseConfig):
+    server: ServerParams = ServerParams()
+    state_directory: Path = CACHE_DIR / "kilroy-module-huggingface" / "state"
+
+
+class BasicConfig(CommonConfig):
+    module_type: Literal["basic"] = "basic"
+    module: BasicParams
+
+
+class RewardModelConfig(CommonConfig):
+    module_type: Literal["rewardModel"] = "rewardModel"
+    module: RewardModelParams
+
+
+class Config(BaseModel):
+    __root__: Annotated[
+        Union[BasicConfig, RewardModelConfig],
+        Field(discriminator="module_type"),
+    ]
+
+
+def get_config(
+    f: Optional[TextIO] = None, overrides: Optional[Iterable[str]] = None
+) -> Config:
+    config = OmegaConf.create(resource_text("config.yaml"))
+    if f is not None:
+        config = OmegaConf.merge(config, OmegaConf.load(f))
+    if overrides is not None:
+        config = OmegaConf.merge(
+            config, OmegaConf.from_dotlist(list(overrides))
+        )
+    config = OmegaConf.to_container(config, resolve=True)
+    return Config.parse_obj(config)

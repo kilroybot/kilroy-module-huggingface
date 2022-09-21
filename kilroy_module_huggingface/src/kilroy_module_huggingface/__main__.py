@@ -6,44 +6,23 @@ This module provides basic CLI entrypoint.
 import asyncio
 import logging
 from asyncio import FIRST_EXCEPTION
-from enum import Enum
-from logging import Logger
 from pathlib import Path
-from typing import Dict, Optional
+from typing import List, Optional
 
 import typer
-from kilroy_module_pytorch_py_sdk import ModuleServer
-from platformdirs import user_cache_dir
+from kilroy_module_server_py_sdk import ModuleServer
 from typer import FileText
 
-from kilroy_module_huggingface.config import get_config
+from kilroy_module_huggingface import log
+from kilroy_module_huggingface.config import Config, get_config
 from kilroy_module_huggingface.modules import HuggingfaceModule
 
 cli = typer.Typer()  # this is actually callable and thus can be an entry point
 
-DEFAULT_STATE_DIRECTORY = (
-    Path(user_cache_dir("kilroybot")) / "kilroy-module-huggingface" / "state"
-)
+logger = logging.getLogger(__name__)
 
 
-class Verbosity(str, Enum):
-    DEBUG = "DEBUG"
-    INFO = "INFO"
-    WARNING = "WARNING"
-    ERROR = "ERROR"
-    CRITICAL = "CRITICAL"
-
-
-def get_logger(verbosity: Verbosity) -> Logger:
-    logging.basicConfig()
-    logger = logging.getLogger("kilroy-module-huggingface")
-    logger.setLevel(verbosity.value)
-    return logger
-
-
-async def load_or_init(
-    module: HuggingfaceModule, state_dir: Path, logger: Logger
-) -> None:
+async def load_or_init(module: HuggingfaceModule, state_dir: Path) -> None:
     if not state_dir.exists() or not any(state_dir.iterdir()):
         logger.info("Initializing module...")
         await module.init()
@@ -64,19 +43,18 @@ async def load_or_init(
         logger.info("Initialization complete.")
 
 
-async def run(config: Dict, logger: Logger, state_dir: Path) -> None:
-    module_type = config["moduleType"]
+async def run(config: Config) -> None:
+    module_type = config.__root__.module_type
     module_cls = HuggingfaceModule.for_category(module_type)
-    module = await module_cls.build(**config.get("moduleParams", {}))
-
-    state_dir = state_dir / module_type
-
+    module = await module_cls.build(**config.__root__.module.dict())
     server = ModuleServer(module, logger)
 
+    state_dir = config.__root__.state_directory / module_type
+
     server_task = asyncio.create_task(
-        server.run(**config.get("serverParams", {}))
+        server.run(**config.__root__.server.dict())
     )
-    init_task = asyncio.create_task(load_or_init(module, state_dir, logger))
+    init_task = asyncio.create_task(load_or_init(module, state_dir))
 
     tasks = [server_task, init_task]
 
@@ -109,27 +87,29 @@ async def run(config: Dict, logger: Logger, state_dir: Path) -> None:
 
 @cli.command()
 def main(
-    config: Optional[FileText] = typer.Option(
-        None, "--config", "-c", dir_okay=False, help="Configuration file"
+    config_file: Optional[FileText] = typer.Option(
+        None, "--config-file", "-C", dir_okay=False, help="Configuration file."
     ),
-    verbosity: Verbosity = typer.Option(
+    config: Optional[List[str]] = typer.Option(
+        None, "--config", "-c", help="Configuration entries."
+    ),
+    verbosity: log.Verbosity = typer.Option(
         "INFO", "--verbosity", "-v", help="Verbosity level."
     ),
-    state_directory: Optional[Path] = typer.Option(
-        DEFAULT_STATE_DIRECTORY,
-        "--state-directory",
-        "-s",
-        file_okay=False,
-        writable=True,
-        help="Path to state directory.",
-    ),
 ) -> None:
-    """Command line interface for kilroy-module-huggingface."""
+    """Command line interface for kilroy-face-twitter."""
 
-    config = get_config(config)
-    logger = get_logger(verbosity)
+    log.configure(verbosity)
 
-    asyncio.run(run(config, logger, state_directory))
+    logger.info("Loading config...")
+    try:
+        config = get_config(config_file, config)
+    except ValueError as e:
+        logger.error("Failed to parse config!", exc_info=e)
+        raise typer.Exit(1)
+    logger.info("Config loaded!")
+
+    asyncio.run(run(config))
 
 
 if __name__ == "__main__":
