@@ -108,7 +108,7 @@ class BasicHuggingfaceModule(BasicModule, HuggingfaceModule[State]):
     @staticmethod
     async def _build_reports() -> ReportsState:
         return ReportsState(
-            epoch_reinforced_scores=[], epoch_supervised_losses=[]
+            step_reinforced_scores=[], step_supervised_losses=[]
         )
 
     async def _build_default_state(self) -> State:
@@ -127,7 +127,7 @@ class BasicHuggingfaceModule(BasicModule, HuggingfaceModule[State]):
             codec=await self._build_codec(params),
             results_cache={},
             batch_size=params.batch_size,
-            epoch=0,
+            step=0,
             metrics=await self._build_metrics(),
             reports=await self._build_reports(),
         )
@@ -170,9 +170,9 @@ class BasicHuggingfaceModule(BasicModule, HuggingfaceModule[State]):
             else None,
             "schedulers_params": state.schedulers_params,
             "batch_size": state.batch_size,
-            "epoch": state.epoch,
-            "epoch_supervised_losses": state.reports.epoch_supervised_losses,
-            "epoch_reinforced_scores": state.reports.epoch_reinforced_scores,
+            "step": state.step,
+            "step_supervised_losses": state.reports.step_supervised_losses,
+            "step_reinforced_scores": state.reports.step_reinforced_scores,
         }
 
     @staticmethod
@@ -292,10 +292,10 @@ class BasicHuggingfaceModule(BasicModule, HuggingfaceModule[State]):
             codec=await self._load_codec(directory, params),
             results_cache={},
             batch_size=state_dict["batch_size"],
-            epoch=state_dict["epoch"],
+            step=state_dict["step"],
             metrics=await self._build_metrics(),
             reports=ReportsState(
-                epoch_supervised_losses=state_dict["epoch_supervised_losses"],
-                epoch_reinforced_scores=state_dict["epoch_reinforced_scores"],
+                step_supervised_losses=state_dict["step_supervised_losses"],
+                step_reinforced_scores=state_dict["step_reinforced_scores"],
             ),
         )

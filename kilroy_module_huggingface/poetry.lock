@@ -310,7 +310,7 @@ test = ["pytest (>=7.0,<8.0)"]
 
 [[package]]
 name = "kilroy-module-pytorch-py-sdk"
-version = "0.6.0"
+version = "0.6.2"
 description = "SDK for kilroy modules using PyTorch 🧰"
 category = "main"
 optional = false
@@ -1031,8 +1031,8 @@ kilroy-module-py-shared = [
     {file = "kilroy_module_py_shared-0.5.0-py3-none-any.whl", hash = "sha256:84fb54a2acb654c618e0d25cde0edb4e0706abc19e4925606445840dc39b0822"},
 ]
 kilroy-module-pytorch-py-sdk = [
-    {file = "kilroy-module-pytorch-py-sdk-0.6.0.tar.gz", hash = "sha256:ffbdc3f7211bf9b3a58c41296694904b7ee234ed7187d648bc0b0ea1b3597e7f"},
-    {file = "kilroy_module_pytorch_py_sdk-0.6.0-py3-none-any.whl", hash = "sha256:963f228cbeb8a29a887266dff5afcd5af1ad5d740489eaad928cf7004c4c8ec0"},
+    {file = "kilroy-module-pytorch-py-sdk-0.6.2.tar.gz", hash = "sha256:61bc75e206d06555c71da15358639be864ea7a99db23f355306f57b9ac36667d"},
+    {file = "kilroy_module_pytorch_py_sdk-0.6.2-py3-none-any.whl", hash = "sha256:afdb283df3cf85fff9fad6af1ab27d133807287f41cfa9778fe8f6bfe2ad7e8f"},
 ]
 kilroy-module-server-py-sdk = [
     {file = "kilroy-module-server-py-sdk-0.8.2.tar.gz", hash = "sha256:7bab0d2aafef716a650b0681ce903c77e67da439db04613d291cf522be39c44f"},

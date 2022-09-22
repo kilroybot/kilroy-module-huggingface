@@ -220,10 +220,10 @@ class RewardModelHuggingfaceModule(
     @staticmethod
     async def _build_reports() -> ReportsState:
         return ReportsState(
-            epoch_supervised_losses=[],
-            epoch_reinforced_scores=[],
-            epoch_reward_model_losses=[],
-            epoch_reward_model_scores=[],
+            step_supervised_losses=[],
+            step_reinforced_scores=[],
+            step_reward_model_losses=[],
+            step_reward_model_scores=[],
         )
 
     async def _build_default_state(self) -> State:
@@ -238,7 +238,7 @@ class RewardModelHuggingfaceModule(
             results_cache={},
             batch_size=params.batch_size,
             sample_size=params.sample_size,
-            epoch=0,
+            step=0,
             metrics=await self._build_metrics(),
             reports=await self._build_reports(),
             coroutine_queue=coroutine_queue,
@@ -304,11 +304,11 @@ class RewardModelHuggingfaceModule(
             "reward_model_schedulers_params": state.reward_model.schedulers_params,
             "batch_size": state.batch_size,
             "sample_size": state.sample_size,
-            "epoch": state.epoch,
-            "epoch_supervised_losses": state.reports.epoch_supervised_losses,
-            "epoch_reinforced_scores": state.reports.epoch_reinforced_scores,
-            "epoch_reward_model_losses": state.reports.epoch_reward_model_losses,
-            "epoch_reward_model_scores": state.reports.epoch_reward_model_scores,
+            "step": state.step,
+            "step_supervised_losses": state.reports.step_supervised_losses,
+            "step_reinforced_scores": state.reports.step_reinforced_scores,
+            "step_reward_model_losses": state.reports.step_reward_model_losses,
+            "step_reward_model_scores": state.reports.step_reward_model_scores,
         }
 
     @staticmethod
@@ -549,16 +549,16 @@ class RewardModelHuggingfaceModule(
             results_cache={},
             batch_size=state_dict["batch_size"],
             sample_size=state_dict["sample_size"],
-            epoch=state_dict["epoch"],
+            step=state_dict["step"],
             metrics=await self._build_metrics(),
             reports=ReportsState(
-                epoch_supervised_losses=state_dict["epoch_supervised_losses"],
-                epoch_reinforced_scores=state_dict["epoch_reinforced_scores"],
-                epoch_reward_model_losses=state_dict[
-                    "epoch_reward_model_losses"
+                step_supervised_losses=state_dict["step_supervised_losses"],
+                step_reinforced_scores=state_dict["step_reinforced_scores"],
+                step_reward_model_losses=state_dict[
+                    "step_reward_model_losses"
                 ],
-                epoch_reward_model_scores=state_dict[
-                    "epoch_reward_model_scores"
+                step_reward_model_scores=state_dict[
+                    "step_reward_model_scores"
                 ],
             ),
             coroutine_queue=coroutine_queue,
