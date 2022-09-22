@@ -1,7 +1,10 @@
 import json
+import logging
+from collections import Counter
 from functools import partial
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, AsyncIterable, Dict, List, Optional, Tuple
+from uuid import UUID
 
 from kilroy_module_pytorch_py_sdk import (
     BasicModule,
@@ -26,6 +29,8 @@ from kilroy_module_pytorch_py_sdk.modules.basic import (
 from kilroy_module_huggingface.models import HuggingfaceLanguageModel
 from kilroy_module_huggingface.modules.base import HuggingfaceModule
 from kilroy_module_huggingface.tokenizer import HuggingfaceTokenizer
+
+logger = logging.getLogger(__name__)
 
 
 class Params(SerializableModel):
@@ -299,3 +304,42 @@ class BasicHuggingfaceModule(BasicModule, HuggingfaceModule[State]):
                 step_reinforced_scores=state_dict["step_reinforced_scores"],
             ),
         )
+
+    async def generate(
+        self, n: int, dry: bool
+    ) -> AsyncIterable[Tuple[UUID, Dict[str, Any]]]:
+        logger.info(f"Generating {n} posts...")
+
+        async for post_id, post in super().generate(n, dry):
+            logger.info(f"Generated post {str(post_id)}.")
+            yield post_id, post
+
+        logger.info("Finished generating posts.")
+
+    async def fit_posts(
+        self, posts: AsyncIterable[Tuple[Dict[str, Any], float]]
+    ) -> None:
+        logger.info("Fitting posts...")
+
+        posts_counter = Counter(posts=0)
+
+        async def count_posts(
+            _posts: AsyncIterable[Tuple[Dict[str, Any], float]],
+            _posts_counter: Counter,
+        ) -> AsyncIterable[Tuple[Dict[str, Any], float]]:
+            async for post, score in _posts:
+                _posts_counter["posts"] += 1
+                yield post, score
+
+        await super().fit_posts(count_posts(posts, posts_counter))
+        logger.info(f"Finished fitting {posts_counter['posts']} posts.")
+
+    async def fit_scores(self, scores: List[Tuple[UUID, float]]) -> None:
+        logger.info(f"Fitting {len(scores)} scores...")
+        await super().fit_scores(scores)
+        logger.info("Finished fitting scores.")
+
+    async def step(self) -> None:
+        logger.info("Performing step...")
+        await super().step()
+        logger.info("Finished performing step.")
