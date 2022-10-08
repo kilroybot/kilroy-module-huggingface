@@ -375,6 +375,9 @@ class RewardModelHuggingfaceModule(
                 model,
             ),
             parameters=model.parameters(),
+            **params.language_model_params.optimizers_params.get(
+                params.language_model_params.optimizer_type, {}
+            ),
         )
 
     @classmethod
@@ -407,6 +410,9 @@ class RewardModelHuggingfaceModule(
                 optimizer,
             ),
             optimizer=await optimizer.get(),
+            **params.language_model_params.schedulers_params.get(
+                params.language_model_params.scheduler_type, {}
+            ),
         )
 
     @classmethod
@@ -458,6 +464,9 @@ class RewardModelHuggingfaceModule(
                 model,
             ),
             parameters=model.parameters(),
+            **params.reward_model_params.optimizers_params.get(
+                params.reward_model_params.optimizer_type, {}
+            ),
         )
 
     @classmethod
@@ -490,6 +499,9 @@ class RewardModelHuggingfaceModule(
                 optimizer,
             ),
             optimizer=await optimizer.get(),
+            **params.reward_model_params.schedulers_params.get(
+                params.reward_model_params.scheduler_type, {}
+            ),
         )
 
     @classmethod
@@ -521,6 +533,7 @@ class RewardModelHuggingfaceModule(
             directory / "frontend_generator",
             Generator,
             default=partial(cls._build_frontend_generator, params),
+            **params.frontend_generator_params,
         )
 
     @classmethod
@@ -531,6 +544,7 @@ class RewardModelHuggingfaceModule(
             directory / "backend_generator",
             Generator,
             default=partial(cls._build_backend_generator, params),
+            **params.backend_generator_params,
         )
 
     @classmethod
@@ -539,6 +553,7 @@ class RewardModelHuggingfaceModule(
             directory / "codec",
             Codec,
             default=partial(cls._build_codec, params),
+            **params.codec_params,
         )
 
     async def _load_saved_state(self, directory: Path) -> State:
