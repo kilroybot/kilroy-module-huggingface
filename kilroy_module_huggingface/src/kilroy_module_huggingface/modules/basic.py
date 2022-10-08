@@ -228,6 +228,7 @@ class BasicHuggingfaceModule(BasicModule, HuggingfaceModule[State]):
             category=state_dict["optimizer_type"],
             default=partial(cls._build_optimizer, params, model),
             parameters=model.parameters(),
+            **params.optimizers_params.get(params.optimizer_type, {}),
         )
 
     @classmethod
@@ -256,6 +257,7 @@ class BasicHuggingfaceModule(BasicModule, HuggingfaceModule[State]):
             category=state_dict["scheduler_type"],
             default=partial(cls._build_scheduler, params, optimizer),
             optimizer=await optimizer.get(),
+            **params.schedulers_params.get(params.scheduler_type, {}),
         )
 
     @classmethod
@@ -266,6 +268,7 @@ class BasicHuggingfaceModule(BasicModule, HuggingfaceModule[State]):
             directory / "generator",
             Generator,
             default=partial(cls._build_generator, params),
+            **params.generator_params,
         )
 
     @classmethod
@@ -274,6 +277,7 @@ class BasicHuggingfaceModule(BasicModule, HuggingfaceModule[State]):
             directory / "codec",
             Codec,
             default=partial(cls._build_codec, params),
+            **params.codec_params,
         )
 
     async def _load_saved_state(self, directory: Path) -> State:
