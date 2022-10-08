@@ -7,3 +7,4 @@
 !kilroy_module_huggingface/README.md
 !environment.yaml
 !requirements.txt
+!entrypoint.sh
