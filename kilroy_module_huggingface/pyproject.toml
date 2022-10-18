@@ -14,7 +14,7 @@ python = "^3.9"
 pydantic =  { version = "^1.10", extras = ["dotenv"] }
 omegaconf = "^2.2"
 typer = { version = "^0.6", extras = ["all"] }
-kilroy-module-pytorch-py-sdk = "~0.6"
+kilroy-module-pytorch-py-sdk = "~0.7"
 transformers = "^4.21"
 platformdirs = "^2.5"
 
