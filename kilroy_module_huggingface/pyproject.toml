@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "kilroy-module-huggingface"
-version = "0.6.0"
+version = "0.6.1"
 description = "kilroy module using Hugging Face models 🤗"
 readme = "README.md"
 authors = ["kilroy <kilroymail@pm.me>"]
@@ -10,7 +10,7 @@ repository = "https://github.com/kilroybot/kilroy-module-huggingface"
 documentation = "https://kilroybot.github.io/kilroy-module-huggingface"
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.10"
 pydantic =  { version = "^1.10", extras = ["dotenv"] }
 omegaconf = "^2.2"
 typer = { version = "^0.6", extras = ["all"] }
@@ -36,7 +36,7 @@ kilroy-module-huggingface = "kilroy_module_huggingface.__main__:cli"
 
 [tool.black]
 line-length = 79
-target-version = ['py39']
+target-version = ['py310']
 
 [tool.poe]
 verbosity = -1
