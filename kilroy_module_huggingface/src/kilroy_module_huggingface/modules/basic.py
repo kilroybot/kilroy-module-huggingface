@@ -249,7 +249,7 @@ class BasicHuggingfaceModule(BasicModule, HuggingfaceModule[State]):
         params: Params,
         optimizer: Optimizer,
     ) -> Optional[Scheduler]:
-        if state_dict["scheduler_type"] is None:
+        if state_dict.get("scheduler_type") is None:
             return None
         return await cls._load_generic(
             directory / "scheduler",

@@ -398,7 +398,7 @@ class RewardModelHuggingfaceModule(
         params: Params,
         optimizer: Optimizer,
     ) -> Optional[Scheduler]:
-        if state_dict["language_model_scheduler_type"] is None:
+        if state_dict.get("language_model_scheduler_type") is None:
             return None
         return await cls._load_generic(
             directory / "language_model" / "scheduler",
@@ -487,7 +487,7 @@ class RewardModelHuggingfaceModule(
         params: Params,
         optimizer: Optimizer,
     ) -> Optional[Scheduler]:
-        if state_dict["reward_model_scheduler_type"] is None:
+        if state_dict.get("reward_model_scheduler_type") is None:
             return None
         return await cls._load_generic(
             directory / "reward_model" / "scheduler",
