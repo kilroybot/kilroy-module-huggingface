@@ -15,9 +15,9 @@ kilroy module using Hugging Face models 🤗
 
 This `README` provides info about the development process.
 
-For more info about the package itself
-see `kilroy_module_huggingface/README.md`
-or [docs](https://kilroybot.github.io/kilroy-module-huggingface).
+For more info about the package itself see
+[package `README`](kilroy_module_huggingface/README.md) or
+[docs](https://kilroybot.github.io/kilroy-module-huggingface).
 
 ## Quickstart (on Ubuntu)
 
