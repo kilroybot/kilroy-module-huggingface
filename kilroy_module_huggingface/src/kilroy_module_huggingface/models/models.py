@@ -2,29 +2,28 @@ import json
 import re
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional, Type, TypeVar
+from typing import Type, TypeVar
 
 import torch
-from kilroy_module_pytorch_py_sdk import (
-    LanguageModel,
-    RewardModel,
-    Savable,
-    background,
-    pack_padded,
-    unpack_to_padded,
-)
 from torch import Tensor, nn
 from torch.nn.utils.rnn import PackedSequence
 from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
-    AutoModelForSequenceClassification,
     PreTrainedModel,
+    AutoModelForTokenClassification,
 )
 
-HuggingfaceModelBaseType = TypeVar(
-    "HuggingfaceModelBaseType", bound="HuggingfaceModelBase"
+from kilroy_module_huggingface.utils import suppress_huggingface_logging
+from kilroy_module_pytorch_py_sdk import (
+    SequentialModel,
+    Savable,
+    background,
+    pack_padded,
+    unpack_to_padded,
 )
+
+BaseType = TypeVar("BaseType", bound="HuggingfaceSequentialModelBase")
 
 
 def make_mask(x: Tensor, lengths: Tensor) -> Tensor:
@@ -33,15 +32,16 @@ def make_mask(x: Tensor, lengths: Tensor) -> Tensor:
     return indices < lengths
 
 
-class HuggingfaceModelBase(Savable, ABC):
-    def __init__(
-        self,
-        model: PreTrainedModel,
-        pad_token_id: int,
-    ) -> None:
+class HuggingfaceSequentialModelBase(SequentialModel, Savable, ABC):
+    def __init__(self, model: PreTrainedModel, pad_token_id: int) -> None:
         super().__init__()
         self._model = model
         self._pad_token_id = pad_token_id
+
+    @classmethod
+    @abstractmethod
+    async def from_path(cls: Type[BaseType], path: str) -> BaseType:
+        pass
 
     async def save(self, directory: Path) -> None:
         model_directory = directory / "model"
@@ -54,8 +54,8 @@ class HuggingfaceModelBase(Savable, ABC):
 
     @classmethod
     async def from_saved(
-        cls: Type[HuggingfaceModelBaseType], directory: Path, **kwargs
-    ) -> HuggingfaceModelBaseType:
+        cls: Type[BaseType], directory: Path, **kwargs
+    ) -> BaseType:
         model_directory = directory / "model"
         config_path = directory / "config.json"
 
@@ -74,23 +74,22 @@ class HuggingfaceModelBase(Savable, ABC):
     def base_model(self) -> nn.Module:
         return self._model.base_model
 
-    def freeze(self, pattern: Optional[str] = ".*") -> None:
-        if pattern is not None:
-            pattern = re.compile(pattern)
+    def freeze(self, pattern: str = ".*") -> None:
+        pattern = re.compile(pattern)
 
         for name, parameter in self._model.base_model.named_parameters():
-            if pattern is not None and pattern.match(name):
+            if pattern.match(name):
                 parameter.requires_grad = False
 
 
-class HuggingfaceLanguageModel(HuggingfaceModelBase, LanguageModel):
+class HuggingfaceLanguageModel(HuggingfaceSequentialModelBase):
     @classmethod
     def _load_saved_model(cls, directory: Path) -> PreTrainedModel:
         return AutoModelForCausalLM.from_pretrained(directory)
 
     @classmethod
-    def from_path(cls, path: str) -> "HuggingfaceLanguageModel":
-        model = AutoModelForCausalLM.from_pretrained(path)
+    async def from_path(cls: Type[BaseType], path: str) -> BaseType:
+        model = await background(AutoModelForCausalLM.from_pretrained, path)
         if model.config.pad_token_id is not None:
             pad_token_id = model.config.pad_token_id
         elif model.config.eos_token_id is not None:
@@ -99,7 +98,7 @@ class HuggingfaceLanguageModel(HuggingfaceModelBase, LanguageModel):
             pad_token_id = 0
         return cls(model, pad_token_id)
 
-    def freeze(self, pattern: Optional[str] = ".*") -> None:
+    def freeze(self, pattern: str = ".*") -> None:
         super().freeze(pattern)
 
         for parameter in self._model.lm_head.parameters():
@@ -113,36 +112,40 @@ class HuggingfaceLanguageModel(HuggingfaceModelBase, LanguageModel):
         return pack_padded(y.logits.log_softmax(-1), lengths)
 
 
-class HuggingfaceRegressionModel(HuggingfaceModelBase, RewardModel):
+class HuggingfaceValueModel(HuggingfaceSequentialModelBase):
     @classmethod
     def _load_saved_model(cls, directory: Path) -> PreTrainedModel:
-        return AutoModelForSequenceClassification.from_pretrained(directory)
+        return AutoModelForTokenClassification.from_pretrained(directory)
 
     @classmethod
-    def from_path(cls, path: str) -> "HuggingfaceRegressionModel":
-        config = AutoConfig.from_pretrained(path)
+    async def from_path(cls: Type[BaseType], path: str) -> BaseType:
+        config = await background(AutoConfig.from_pretrained, path)
         if config.pad_token_id is not None:
             pad_token_id = config.pad_token_id
         elif config.eos_token_id is not None:
             pad_token_id = config.eos_token_id
         else:
             pad_token_id = 0
-        model = AutoModelForSequenceClassification.from_pretrained(
-            path,
-            num_labels=1,
-            problem_type="regression",
-            pad_token_id=pad_token_id,
-        )
+        with suppress_huggingface_logging():
+            model = await background(
+                AutoModelForTokenClassification.from_pretrained,
+                path,
+                num_labels=1,
+                problem_type="regression",
+                pad_token_id=pad_token_id,
+                ignore_mismatched_sizes=True,
+            )
         return cls(model, pad_token_id)
 
-    def freeze(self, pattern: Optional[str] = ".*") -> None:
+    def freeze(self, pattern: str = ".*") -> None:
         super().freeze(pattern)
 
-        for parameter in self._model.score.parameters():
+        for parameter in self._model.classifier.parameters():
             parameter.requires_grad = True
 
-    def forward(self, x: PackedSequence) -> Tensor:
+    def forward(self, x: PackedSequence) -> PackedSequence:
         x, lengths = unpack_to_padded(x, pad_value=self._pad_token_id)
         x = x[:, :, 0]
         mask = make_mask(x, lengths)
-        return self._model(x, attention_mask=mask).logits
+        y = self._model(x, attention_mask=mask)
+        return pack_padded(y.logits, lengths)
