@@ -1,12 +1,14 @@
 # default configuration
-module_type: basic
 module:
-  model_name: gpt2
-  freeze: 'h\.(0|1|2|3|4|5|6|7|8|9|10)\..*'
-  batch_size: 16
-  generator_params:
-    max_length: 16
-    batch_size: 16
+  models:
+    policy:
+      path: "gpt2"
+      freeze: 'h\.(0|1|2|3|4|5|6)\..*'
+      batchSize: 64
+    value:
+      path: "gpt2"
+      freeze: 'h\.(0|1|2|3|4|5|6)\..*'
+      batchSize: 64
 server:
   host: "0.0.0.0"
   port: 11000

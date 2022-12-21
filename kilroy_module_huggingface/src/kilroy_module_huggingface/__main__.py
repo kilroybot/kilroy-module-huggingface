@@ -11,12 +11,12 @@ from pathlib import Path
 from typing import List, Optional
 
 import typer
-from kilroy_module_server_py_sdk import ModuleServer
 from typer import FileText
 
 from kilroy_module_huggingface import log
 from kilroy_module_huggingface.config import Config, get_config
-from kilroy_module_huggingface.modules import HuggingfaceModule
+from kilroy_module_huggingface.module import HuggingfaceModule
+from kilroy_module_server_py_sdk import ModuleServer, ModuleService
 
 cli = typer.Typer()  # this is actually callable and thus can be an entry point
 
@@ -70,16 +70,15 @@ async def load_or_init(module: HuggingfaceModule, state_dir: Path) -> None:
 async def run(config: Config) -> None:
     await attach_signal_handlers()
 
-    module_type = config.__root__.module_type
-    module_cls = HuggingfaceModule.for_category(module_type)
-    module = await module_cls.build(**config.__root__.module.dict())
-    server = ModuleServer(module, logger)
+    state_dir = config.state_directory
 
-    state_dir = config.__root__.state_directory / module_type
-
-    server_task = asyncio.create_task(
-        server.run(**config.__root__.server.dict())
+    module = await HuggingfaceModule.build(
+        state_directory=state_dir, **config.module
     )
+    service = ModuleService(module, state_dir)
+    server = ModuleServer(service, logger)
+
+    server_task = asyncio.create_task(server.run(**config.server.dict()))
     init_task = asyncio.create_task(load_or_init(module, state_dir))
 
     tasks = [server_task, init_task]

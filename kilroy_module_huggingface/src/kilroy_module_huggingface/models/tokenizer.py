@@ -1,8 +1,10 @@
 from pathlib import Path
 from typing import List
 
-from kilroy_module_pytorch_py_sdk import Savable, Tokenizer
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
+
+from kilroy_module_pytorch_py_sdk import Savable, Tokenizer
+from kilroy_server_py_utils import background
 
 
 class HuggingfaceTokenizer(Savable, Tokenizer):
@@ -17,11 +19,13 @@ class HuggingfaceTokenizer(Savable, Tokenizer):
     async def from_saved(
         cls, directory: Path, **kwargs
     ) -> "HuggingfaceTokenizer":
-        return cls(AutoTokenizer.from_pretrained(directory))
+        tokenizer = await background(AutoTokenizer.from_pretrained, directory)
+        return cls(tokenizer)
 
     @classmethod
-    def from_path(cls, path: str) -> "HuggingfaceTokenizer":
-        return cls(AutoTokenizer.from_pretrained(path))
+    async def from_path(cls, path: str) -> "HuggingfaceTokenizer":
+        tokenizer = await background(AutoTokenizer.from_pretrained, path)
+        return cls(tokenizer)
 
     def encode(self, text: str) -> List[int]:
         indices = self._tokenizer.encode(text)
