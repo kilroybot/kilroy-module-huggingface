@@ -33,7 +33,7 @@ class ServerParams(BaseModel):
     port: int = 11000
 
 
-class Config(BaseModel):
+class Config(BaseConfig):
     server: ServerParams = ServerParams()
     module: Dict[str, Any] = {}
     state_directory: Path = CACHE_DIR / "kilroy-module-huggingface" / "state"
