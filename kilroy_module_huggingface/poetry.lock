@@ -291,7 +291,7 @@ pyhumps = ">=3.7,<4.0"
 
 [[package]]
 name = "kilroy-module-pytorch-py-sdk"
-version = "0.8.3"
+version = "0.8.4"
 description = "SDK for kilroy modules using PyTorch 🧰"
 category = "main"
 optional = false
@@ -1029,8 +1029,8 @@ kilroy-module-py-shared = [
     {file = "kilroy_module_py_shared-0.7.0-py3-none-any.whl", hash = "sha256:a217209f17242d27463863b435196708cac9b54730525444004886c8896d89eb"},
 ]
 kilroy-module-pytorch-py-sdk = [
-    {file = "kilroy-module-pytorch-py-sdk-0.8.3.tar.gz", hash = "sha256:161be635e9e9405a6fbfdd29894c23537888e745e6982a177d9645e539ea6216"},
-    {file = "kilroy_module_pytorch_py_sdk-0.8.3-py3-none-any.whl", hash = "sha256:f857f5b4a482d49720991c8a0e7cea22e83c414d544d4bea9afd2be85096670d"},
+    {file = "kilroy-module-pytorch-py-sdk-0.8.4.tar.gz", hash = "sha256:607101c436e02490d0de4d6b278d01044d295d411b298b1b83075f466cb062fc"},
+    {file = "kilroy_module_pytorch_py_sdk-0.8.4-py3-none-any.whl", hash = "sha256:5c095f2637213ef919e15049e67aa580bea71370735287f1d145ca809fb45db2"},
 ]
 kilroy-module-server-py-sdk = [
     {file = "kilroy-module-server-py-sdk-0.10.0.tar.gz", hash = "sha256:3faa268480d06a06a0aa560c50caad597f37f98a8bbca2fc83d816920d491e37"},
